@@ -1,0 +1,6 @@
+{
+  "name": "PDF Scanner",
+  "description": "CamScanner-style multi-page PDF scanner with automatic edge detection, perspective deskewing, enhancement filters, page reordering, and PDF export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
