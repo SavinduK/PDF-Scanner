@@ -279,6 +279,23 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun saveActiveImageToGallery(context: Context, onResult: (Boolean, String) -> Unit) {
+        val bmp = _uiState.value.activeOriginalBitmap ?: run {
+            onResult(false, "No active image to save")
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, loadingMessage = "Saving image to gallery...") }
+            val uri = ImageUtils.saveBitmapToGallery(context, bmp)
+            _uiState.update { it.copy(isLoading = false) }
+            if (uri != null) {
+                onResult(true, "Image saved to Gallery successfully")
+            } else {
+                onResult(false, "Failed to save image to Gallery")
+            }
+        }
+    }
+
     /**
      * Confirms crop quadrilateral and advances to Filter screen
      */

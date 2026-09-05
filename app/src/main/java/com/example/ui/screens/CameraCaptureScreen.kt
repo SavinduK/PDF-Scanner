@@ -121,6 +121,7 @@ fun CameraCaptureScreen(
                 useFrontCamera = useFrontCamera,
                 captureTrigger = captureTrigger,
                 onImageCaptured = { bmp ->
+                    isFlashEnabled = false
                     viewModel.onImageCaptured(bmp)
                 }
             )

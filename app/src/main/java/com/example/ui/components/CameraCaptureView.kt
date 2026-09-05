@@ -118,6 +118,9 @@ fun CameraCaptureView(
             val executor = ContextCompat.getMainExecutor(context)
             capture.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
+                    try {
+                        camera?.cameraControl?.enableTorch(false)
+                    } catch (_: Exception) {}
                     val bitmap = imageProxyToBitmap(image)
                     image.close()
                     if (bitmap != null) {

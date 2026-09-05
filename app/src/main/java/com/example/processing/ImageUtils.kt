@@ -140,4 +140,40 @@ object ImageUtils {
         val matrix = Matrix().apply { postRotate(degrees) }
         return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
+
+    suspend fun saveBitmapToGallery(
+        context: Context,
+        bitmap: Bitmap,
+        title: String = "Scanned_Doc_${System.currentTimeMillis()}"
+    ): Uri? = withContext(Dispatchers.IO) {
+        try {
+            val contentResolver = context.contentResolver
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "$title.jpg")
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/PDFScanner")
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+
+            val imageUri = contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                ?: return@withContext null
+
+            contentResolver.openOutputStream(imageUri)?.use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                contentResolver.update(imageUri, contentValues, null, null)
+            }
+
+            imageUri
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
 }

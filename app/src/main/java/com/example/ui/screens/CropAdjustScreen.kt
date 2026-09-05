@@ -1,9 +1,11 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,8 +39,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.ScreenState
@@ -53,6 +59,7 @@ fun CropAdjustScreen(
     viewModel: ScannerViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val bitmap = uiState.activeOriginalBitmap
 
     Scaffold(
@@ -109,60 +116,52 @@ fun CropAdjustScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
                 ) {
-                    // Quick Tools Row (Auto-Detect, Full Image, Rotate)
+                    // Quick Tools Row (Auto-Detect, Full Page, Rotate, Save Image)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         // Auto-Detect edges button
-                        OutlinedButton(
+                        CropActionButton(
+                            icon = Icons.Default.DocumentScanner,
+                            label = "Auto Detect",
                             onClick = { viewModel.autoDetectActivePageEdges() },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            modifier = Modifier.testTag("crop_auto_detect_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DocumentScanner,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Auto Detect", fontSize = 13.sp)
-                        }
+                            testTag = "crop_auto_detect_btn",
+                            modifier = Modifier.weight(1f)
+                        )
 
                         // Full image selection
-                        OutlinedButton(
+                        CropActionButton(
+                            icon = Icons.Default.CropFree,
+                            label = "Full Page",
                             onClick = { viewModel.resetCropToFull() },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            modifier = Modifier.testTag("crop_full_image_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CropFree,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Full Page", fontSize = 13.sp)
-                        }
+                            testTag = "crop_full_image_btn",
+                            modifier = Modifier.weight(1f)
+                        )
 
                         // Rotate 90 deg
-                        OutlinedButton(
+                        CropActionButton(
+                            icon = Icons.Default.RotateRight,
+                            label = "Rotate",
                             onClick = { viewModel.rotateActivePage() },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            modifier = Modifier.testTag("crop_rotate_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.RotateRight,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Rotate", fontSize = 13.sp)
-                        }
+                            testTag = "crop_rotate_btn",
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Save Image to Gallery
+                        CropActionButton(
+                            icon = Icons.Default.Download,
+                            label = "Save Image",
+                            onClick = {
+                                viewModel.saveActiveImageToGallery(context) { _, message ->
+                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            testTag = "crop_save_gallery_btn",
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -212,6 +211,49 @@ fun CropAdjustScreen(
             } else {
                 Text("No image loaded", color = Color.White)
             }
+        }
+    }
+}
+
+@Composable
+private fun CropActionButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = Color(0xFF1E2826),
+            contentColor = Color.White
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 6.dp),
+        modifier = modifier
+            .height(54.dp)
+            .testTag(testTag)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
