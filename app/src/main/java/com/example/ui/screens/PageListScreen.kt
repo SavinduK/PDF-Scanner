@@ -1,11 +1,12 @@
 package com.example.ui.screens
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -54,11 +56,13 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -76,6 +80,7 @@ fun PageListScreen(
     viewModel: ScannerViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris: List<Uri> ->
@@ -91,13 +96,15 @@ fun PageListScreen(
                 title = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "Document Pages",
+                            text = uiState.currentDocumentTitle.ifBlank { "Document Pages" },
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
+                            fontSize = 17.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${uiState.currentPages.size} page(s) ready",
-                            fontSize = 12.sp,
+                            text = "${uiState.currentPages.size} page(s) • Edit Mode",
+                            fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -110,6 +117,24 @@ fun PageListScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back to Home"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            val savedDoc = viewModel.saveCurrentDocumentSession()
+                            if (savedDoc != null) {
+                                Toast.makeText(context, "Document saved to edit or add pages later!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = uiState.currentPages.isNotEmpty(),
+                        modifier = Modifier.testTag("page_list_save_top_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Save,
+                            contentDescription = "Save Document",
+                            tint = if (uiState.currentPages.isNotEmpty()) EmeraldPrimary else Color.Gray
                         )
                     }
                 },
@@ -127,59 +152,85 @@ fun PageListScreen(
                     .fillMaxWidth()
                     .navigationBarsPadding()
             ) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    // Action Buttons Row: Add Page (Camera), Add Gallery, Export PDF
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    // Action Row with perfectly aligned buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Add via Camera
-                        OutlinedButton(
+                        PageListActionButton(
+                            icon = Icons.Default.CameraAlt,
+                            label = "+ Camera",
                             onClick = { viewModel.navigateTo(ScreenState.CAMERA) },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp)
-                                .testTag("page_list_add_camera_btn")
-                        ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("+ Camera", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
+                            testTag = "page_list_add_camera_btn",
+                            modifier = Modifier.weight(1f)
+                        )
 
                         // Add via Gallery
-                        OutlinedButton(
+                        PageListActionButton(
+                            icon = Icons.Default.PhotoLibrary,
+                            label = "+ Gallery",
                             onClick = {
                                 galleryLauncher.launch(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                 )
                             },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp)
-                                .testTag("page_list_add_gallery_btn")
-                        ) {
-                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("+ Gallery", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
+                            testTag = "page_list_add_gallery_btn",
+                            modifier = Modifier.weight(1f)
+                        )
 
-                        // Export PDF Button
+                        // Save Edit Session
+                        PageListActionButton(
+                            icon = Icons.Default.Save,
+                            label = "Save",
+                            onClick = {
+                                val doc = viewModel.saveCurrentDocumentSession()
+                                if (doc != null) {
+                                    Toast.makeText(context, "Document saved for later editing", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            testTag = "page_list_save_session_btn",
+                            modifier = Modifier.weight(0.9f)
+                        )
+
+                        // Export PDF
                         Button(
                             onClick = { viewModel.openExportDialog() },
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = EmeraldPrimary,
+                                disabledContainerColor = EmeraldPrimary.copy(alpha = 0.4f)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
                             enabled = uiState.currentPages.isNotEmpty(),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                             modifier = Modifier
                                 .weight(1.3f)
-                                .height(50.dp)
+                                .height(48.dp)
                                 .testTag("page_list_export_pdf_btn")
                         ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export PDF", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureAsPdf,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Export PDF",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.5.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
@@ -207,9 +258,9 @@ fun PageListScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
@@ -234,6 +285,48 @@ fun PageListScreen(
 }
 
 @Composable
+private fun PageListActionButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
+        modifier = modifier
+            .height(48.dp)
+            .testTag(testTag)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 fun PageThumbnailCard(
     page: ScannedPage,
     pageNumber: Int,
@@ -247,7 +340,7 @@ fun PageThumbnailCard(
 ) {
     Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -318,18 +411,18 @@ fun PageThumbnailCard(
                 }
             }
 
-            // Controls Bar under thumbnail
+            // Controls Bar under thumbnail: Re-crop, Re-filter, Move Left/Up, Move Right/Down
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Re-crop button
                 IconButton(
                     onClick = onReCrop,
-                    modifier = Modifier.size(34.dp).testTag("page_recrop_btn_$pageNumber")
+                    modifier = Modifier.size(36.dp).testTag("page_recrop_btn_$pageNumber")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Crop,
@@ -342,7 +435,7 @@ fun PageThumbnailCard(
                 // Re-filter button
                 IconButton(
                     onClick = onReFilter,
-                    modifier = Modifier.size(34.dp).testTag("page_refilter_btn_$pageNumber")
+                    modifier = Modifier.size(36.dp).testTag("page_refilter_btn_$pageNumber")
                 ) {
                     Icon(
                         imageVector = Icons.Default.FilterAlt,
@@ -356,7 +449,7 @@ fun PageThumbnailCard(
                 IconButton(
                     onClick = onMoveUp,
                     enabled = !isFirst,
-                    modifier = Modifier.size(34.dp).testTag("page_move_up_btn_$pageNumber")
+                    modifier = Modifier.size(36.dp).testTag("page_move_up_btn_$pageNumber")
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowUpward,
@@ -370,7 +463,7 @@ fun PageThumbnailCard(
                 IconButton(
                     onClick = onMoveDown,
                     enabled = !isLast,
-                    modifier = Modifier.size(34.dp).testTag("page_move_down_btn_$pageNumber")
+                    modifier = Modifier.size(36.dp).testTag("page_move_down_btn_$pageNumber")
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowDownward,

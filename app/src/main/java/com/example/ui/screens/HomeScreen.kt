@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -255,6 +256,11 @@ fun HomeScreen(
                     items(uiState.savedDocuments, key = { it.id }) { doc ->
                         DocumentItemCard(
                             document = doc,
+                            onEditPages = {
+                                if (doc.pages.isNotEmpty()) {
+                                    viewModel.loadDocumentForEditing(doc)
+                                }
+                            },
                             onShare = {
                                 doc.lastPdfPath?.let { path ->
                                     val file = File(path)
@@ -262,9 +268,10 @@ fun HomeScreen(
                                 }
                             },
                             onOpen = {
-                                doc.lastPdfPath?.let { path ->
-                                    val file = File(path)
-                                    if (file.exists()) viewModel.viewPdf(file)
+                                if (doc.lastPdfPath != null && File(doc.lastPdfPath).exists()) {
+                                    viewModel.viewPdf(File(doc.lastPdfPath))
+                                } else if (doc.pages.isNotEmpty()) {
+                                    viewModel.loadDocumentForEditing(doc)
                                 }
                             },
                             onDelete = { viewModel.deleteDocument(doc) }
@@ -279,6 +286,7 @@ fun HomeScreen(
 @Composable
 fun DocumentItemCard(
     document: ScannedDocument,
+    onEditPages: () -> Unit,
     onShare: () -> Unit,
     onOpen: () -> Unit,
     onDelete: () -> Unit
@@ -286,6 +294,7 @@ fun DocumentItemCard(
     val dateFormat = SimpleDateFormat("MMM dd, yyyy • HH:mm", Locale.getDefault())
     val dateStr = dateFormat.format(Date(document.createdAt))
     val sizeKb = (document.pdfFileSizeBytes / 1024).coerceAtLeast(1)
+    val pageCount = document.pages.size
 
     Card(
         shape = RoundedCornerShape(14.dp),
@@ -317,7 +326,7 @@ fun DocumentItemCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -330,9 +339,22 @@ fun DocumentItemCard(
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "$dateStr • ${sizeKb} KB",
+                    text = if (pageCount > 0) "$pageCount page(s) • $dateStr • $sizeKb KB" else "$dateStr • $sizeKb KB",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Edit / Add pages button
+            IconButton(
+                onClick = onEditPages,
+                modifier = Modifier.size(40.dp).testTag("doc_edit_pages_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PostAdd,
+                    contentDescription = "Edit / Add Pages",
+                    tint = EmeraldPrimary,
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
@@ -344,7 +366,7 @@ fun DocumentItemCard(
                 Icon(
                     imageVector = Icons.Default.Share,
                     contentDescription = "Share PDF",
-                    tint = EmeraldPrimary,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             }
