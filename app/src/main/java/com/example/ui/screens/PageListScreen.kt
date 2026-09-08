@@ -92,6 +92,9 @@ fun PageListScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
+            val existingDoc = uiState.savedDocuments.find { it.id == uiState.currentDocumentId }
+            val hasPdf = existingDoc?.lastPdfPath != null && File(existingDoc.lastPdfPath).exists()
+
             CenterAlignedTopAppBar(
                 title = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -103,15 +106,24 @@ fun PageListScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${uiState.currentPages.size} page(s) • Edit Mode",
+                            text = if (hasPdf) {
+                                "${uiState.currentPages.size} page(s) • Document Mode • PDF Linked"
+                            } else {
+                                "${uiState.currentPages.size} page(s) • Document Mode"
+                            },
                             fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (hasPdf) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(
-                        onClick = { viewModel.navigateTo(ScreenState.HOME) },
+                        onClick = {
+                            if (uiState.currentPages.isNotEmpty()) {
+                                viewModel.saveCurrentDocumentSession()
+                            }
+                            viewModel.navigateTo(ScreenState.HOME)
+                        },
                         modifier = Modifier.testTag("page_list_home_btn")
                     ) {
                         Icon(
@@ -123,9 +135,14 @@ fun PageListScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            val savedDoc = viewModel.saveCurrentDocumentSession()
-                            if (savedDoc != null) {
-                                Toast.makeText(context, "Document saved to edit or add pages later!", Toast.LENGTH_SHORT).show()
+                            val doc = viewModel.saveCurrentDocumentSession()
+                            if (doc != null) {
+                                val msg = if (hasPdf) {
+                                    "Document saved & related PDF updated!"
+                                } else {
+                                    "Document saved permanently in Document Mode!"
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
                         },
                         enabled = uiState.currentPages.isNotEmpty(),
@@ -144,6 +161,9 @@ fun PageListScreen(
             )
         },
         bottomBar = {
+            val existingDoc = uiState.savedDocuments.find { it.id == uiState.currentDocumentId }
+            val hasPdf = existingDoc?.lastPdfPath != null && File(existingDoc.lastPdfPath).exists()
+
             Surface(
                 tonalElevation = 8.dp,
                 shadowElevation = 8.dp,
@@ -188,7 +208,12 @@ fun PageListScreen(
                             onClick = {
                                 val doc = viewModel.saveCurrentDocumentSession()
                                 if (doc != null) {
-                                    Toast.makeText(context, "Document saved for later editing", Toast.LENGTH_SHORT).show()
+                                    val msg = if (hasPdf) {
+                                        "Document saved & related PDF updated!"
+                                    } else {
+                                        "Document saved permanently in Document Mode!"
+                                    }
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                 }
                             },
                             testTag = "page_list_save_session_btn",

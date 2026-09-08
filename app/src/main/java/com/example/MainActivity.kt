@@ -71,6 +71,14 @@ fun ScannerApp(viewModel: ScannerViewModel) {
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
+            viewModel.clearErrorMessage()
+        }
+    }
+
+    LaunchedEffect(uiState.infoMessage) {
+        uiState.infoMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearInfoMessage()
         }
     }
 
@@ -92,7 +100,12 @@ fun ScannerApp(viewModel: ScannerViewModel) {
                 }
             }
             ScreenState.FILTER_ENHANCE -> viewModel.navigateTo(ScreenState.CROP_ADJUST)
-            ScreenState.PAGE_LIST -> viewModel.navigateTo(ScreenState.HOME)
+            ScreenState.PAGE_LIST -> {
+                if (uiState.currentPages.isNotEmpty()) {
+                    viewModel.saveCurrentDocumentSession()
+                }
+                viewModel.navigateTo(ScreenState.HOME)
+            }
             ScreenState.HOME -> { /* system handles exiting app */ }
         }
     }

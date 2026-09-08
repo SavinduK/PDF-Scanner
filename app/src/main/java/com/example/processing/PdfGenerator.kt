@@ -24,7 +24,8 @@ object PdfGenerator {
         context: Context,
         pages: List<ScannedPage>,
         filename: String,
-        quality: PdfQuality
+        quality: PdfQuality,
+        targetFile: File? = null
     ): File? = withContext(Dispatchers.IO) {
         if (pages.isEmpty()) return@withContext null
 
@@ -62,16 +63,18 @@ object PdfGenerator {
                 loadedBitmap.recycle()
             }
 
-            // Ensure destination directory
-            val pdfDir = File(context.getExternalFilesDir(null), "documents").apply {
-                if (!exists()) mkdirs()
+            val outputFile = targetFile ?: run {
+                val pdfDir = File(context.getExternalFilesDir(null), "documents").apply {
+                    if (!exists()) mkdirs()
+                }
+                val sanitizedName = if (filename.endsWith(".pdf", ignoreCase = true)) {
+                    filename
+                } else {
+                    "$filename.pdf"
+                }
+                File(pdfDir, sanitizedName)
             }
-            val sanitizedName = if (filename.endsWith(".pdf", ignoreCase = true)) {
-                filename
-            } else {
-                "$filename.pdf"
-            }
-            val outputFile = File(pdfDir, sanitizedName)
+            outputFile.parentFile?.mkdirs()
 
             FileOutputStream(outputFile).use { out ->
                 pdfDoc.writeTo(out)

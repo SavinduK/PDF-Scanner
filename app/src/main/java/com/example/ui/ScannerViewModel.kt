@@ -8,6 +8,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.model.CropQuad
 import com.example.model.FilterType
+import com.example.model.GeneratedPdfItem
+import com.example.model.HomeTab
 import com.example.model.PdfQuality
 import com.example.model.Point2D
 import com.example.model.ScannedDocument
@@ -34,7 +36,9 @@ import java.util.Locale
 
 data class ScannerUiState(
     val currentScreen: ScreenState = ScreenState.HOME,
+    val selectedHomeTab: HomeTab = HomeTab.DOCUMENTS,
     val savedDocuments: List<ScannedDocument> = emptyList(),
+    val pdfFiles: List<GeneratedPdfItem> = emptyList(),
     val currentPages: List<ScannedPage> = emptyList(),
     val currentDocumentId: String? = null,
     val currentDocumentTitle: String = "",
@@ -50,6 +54,7 @@ data class ScannerUiState(
     val isLoading: Boolean = false,
     val loadingMessage: String = "",
     val errorMessage: String? = null,
+    val infoMessage: String? = null,
 
     // Export dialog
     val isExportDialogOpen: Boolean = false,
@@ -132,6 +137,60 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
+    private fun buildPdfFilesList(docs: List<ScannedDocument>): List<GeneratedPdfItem> {
+        val list = mutableListOf<GeneratedPdfItem>()
+        val seenPaths = mutableSetOf<String>()
+
+        for (doc in docs) {
+            val path = doc.lastPdfPath ?: continue
+            val file = File(path)
+            if (file.exists() && file.isFile) {
+                seenPaths.add(file.absolutePath)
+                list.add(
+                    GeneratedPdfItem(
+                        id = "pdf_${doc.id}",
+                        documentId = doc.id,
+                        documentTitle = doc.title,
+                        filePath = file.absolutePath,
+                        fileName = file.name,
+                        fileSizeBytes = if (doc.pdfFileSizeBytes > 0) doc.pdfFileSizeBytes else file.length(),
+                        pageCount = doc.pages.size,
+                        lastModified = file.lastModified().let { if (it > 0) it else doc.updatedAt },
+                        quality = doc.pdfQuality
+                    )
+                )
+            }
+        }
+
+        try {
+            val context = getApplication<Application>()
+            val pdfDir = File(context.getExternalFilesDir(null), "documents")
+            if (pdfDir.exists() && pdfDir.isDirectory) {
+                val files = pdfDir.listFiles { f -> f.extension.equals("pdf", ignoreCase = true) }
+                if (files != null) {
+                    for (file in files) {
+                        if (!seenPaths.contains(file.absolutePath)) {
+                            list.add(
+                                GeneratedPdfItem(
+                                    id = "pdf_standalone_${file.name.hashCode()}",
+                                    documentId = null,
+                                    documentTitle = file.nameWithoutExtension,
+                                    filePath = file.absolutePath,
+                                    fileName = file.name,
+                                    fileSizeBytes = file.length(),
+                                    pageCount = 0,
+                                    lastModified = file.lastModified()
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        return list.sortedByDescending { it.lastModified }
+    }
+
     private fun loadSavedDocuments() {
         val jsonString = prefs.getString("saved_docs", "[]") ?: "[]"
         try {
@@ -142,8 +201,11 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 val docId = obj.optString("id", java.util.UUID.randomUUID().toString())
                 val title = obj.optString("title", "Untitled")
                 val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                val updatedAt = obj.optLong("updatedAt", createdAt)
                 val pdfPath = obj.optString("pdfPath", null)
                 val fileSize = obj.optLong("fileSize", 0L)
+                val qualityStr = obj.optString("pdfQuality", "MEDIUM")
+                val quality = try { PdfQuality.valueOf(qualityStr) } catch (_: Exception) { PdfQuality.MEDIUM }
 
                 val pagesArray = obj.optJSONArray("pages")
                 val pagesList = mutableListOf<ScannedPage>()
@@ -164,14 +226,18 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                             id = docId,
                             title = title,
                             createdAt = createdAt,
+                            updatedAt = updatedAt,
                             pages = pagesList,
                             lastPdfPath = if (hasPdf) pdfPath else null,
-                            pdfFileSizeBytes = fileSize
+                            pdfFileSizeBytes = fileSize,
+                            pdfQuality = quality
                         )
                     )
                 }
             }
-            _uiState.update { it.copy(savedDocuments = docs) }
+            val sortedDocs = docs.sortedByDescending { it.updatedAt }
+            val pdfList = buildPdfFilesList(sortedDocs)
+            _uiState.update { it.copy(savedDocuments = sortedDocs, pdfFiles = pdfList) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -185,8 +251,10 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     put("id", doc.id)
                     put("title", doc.title)
                     put("createdAt", doc.createdAt)
+                    put("updatedAt", doc.updatedAt)
                     put("pdfPath", doc.lastPdfPath)
                     put("fileSize", doc.pdfFileSizeBytes)
+                    put("pdfQuality", doc.pdfQuality.name)
 
                     val pArray = JSONArray()
                     for (p in doc.pages) {
@@ -197,9 +265,23 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 jsonArray.put(obj)
             }
             prefs.edit().putString("saved_docs", jsonArray.toString()).apply()
+            val pdfList = buildPdfFilesList(docs)
+            _uiState.update { it.copy(savedDocuments = docs, pdfFiles = pdfList) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    fun selectHomeTab(tab: HomeTab) {
+        _uiState.update { it.copy(selectedHomeTab = tab) }
+    }
+
+    fun clearInfoMessage() {
+        _uiState.update { it.copy(infoMessage = null) }
+    }
+
+    fun clearErrorMessage() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
     fun navigateTo(screen: ScreenState) {
@@ -208,11 +290,13 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
     fun startNewScanSession() {
         val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
+        val newDocId = java.util.UUID.randomUUID().toString()
+        val title = "Doc_$dateStr"
         _uiState.update {
             it.copy(
                 currentPages = emptyList(),
-                currentDocumentId = null,
-                currentDocumentTitle = "Doc_$dateStr",
+                currentDocumentId = newDocId,
+                currentDocumentTitle = title,
                 activePageIndex = -1,
                 activeOriginalBitmap = null,
                 activePreviewBitmap = null,
@@ -221,7 +305,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun saveCurrentDocumentSession(customTitle: String? = null): ScannedDocument? {
+    fun saveCurrentDocumentSession(customTitle: String? = null, autoUpdatePdf: Boolean = true): ScannedDocument? {
         val pages = _uiState.value.currentPages
         if (pages.isEmpty()) return null
 
@@ -232,13 +316,16 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val title = customTitle?.ifBlank { defaultTitle } ?: defaultTitle
 
         val existingDoc = _uiState.value.savedDocuments.find { it.id == docId }
+        val now = System.currentTimeMillis()
         val updatedDoc = ScannedDocument(
             id = docId,
             title = title,
-            createdAt = existingDoc?.createdAt ?: System.currentTimeMillis(),
+            createdAt = existingDoc?.createdAt ?: now,
+            updatedAt = now,
             pages = pages,
             lastPdfPath = existingDoc?.lastPdfPath,
-            pdfFileSizeBytes = existingDoc?.pdfFileSizeBytes ?: 0L
+            pdfFileSizeBytes = existingDoc?.pdfFileSizeBytes ?: 0L,
+            pdfQuality = existingDoc?.pdfQuality ?: _uiState.value.selectedQuality
         )
 
         val updatedList = _uiState.value.savedDocuments.filter { it.id != docId }.toMutableList().apply {
@@ -253,6 +340,41 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             )
         }
         persistDocuments(updatedList)
+
+        // If this document has a related PDF generated previously, update it as well
+        val pdfPath = updatedDoc.lastPdfPath
+        if (autoUpdatePdf && pdfPath != null && File(pdfPath).exists()) {
+            viewModelScope.launch {
+                val context = getApplication<Application>()
+                val pdfFile = File(pdfPath)
+                val updatedPdf = PdfGenerator.generatePdf(
+                    context = context,
+                    pages = pages,
+                    filename = pdfFile.name,
+                    quality = updatedDoc.pdfQuality,
+                    targetFile = pdfFile
+                )
+                if (updatedPdf != null && updatedPdf.exists()) {
+                    val finalDoc = updatedDoc.copy(
+                        pdfFileSizeBytes = updatedPdf.length(),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    val finalList = _uiState.value.savedDocuments.map { if (it.id == docId) finalDoc else it }
+                    _uiState.update {
+                        it.copy(
+                            savedDocuments = finalList,
+                            infoMessage = "Document saved & related PDF updated! (${pages.size} pages)"
+                        )
+                    }
+                    persistDocuments(finalList)
+                }
+            }
+        } else {
+            _uiState.update {
+                it.copy(infoMessage = "Document saved permanently in Document Mode (${pages.size} pages)")
+            }
+        }
+
         return updatedDoc
     }
 
@@ -370,6 +492,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     currentScreen = ScreenState.PAGE_LIST
                 )
             }
+            saveCurrentDocumentSession()
         }
     }
 
@@ -505,6 +628,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     currentScreen = ScreenState.PAGE_LIST
                 )
             }
+            // Auto-persist changes to document mode (and update related PDF if present)
+            saveCurrentDocumentSession()
         }
     }
 
@@ -515,6 +640,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             val item = list.removeAt(fromIndex)
             list.add(toIndex, item)
             _uiState.update { it.copy(currentPages = list) }
+            saveCurrentDocumentSession()
         }
     }
 
@@ -527,6 +653,14 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     currentPages = list,
                     currentScreen = if (list.isEmpty()) ScreenState.HOME else ScreenState.PAGE_LIST
                 )
+            }
+            if (list.isNotEmpty()) {
+                saveCurrentDocumentSession()
+            } else {
+                _uiState.value.currentDocumentId?.let { docId ->
+                    val existing = _uiState.value.savedDocuments.find { it.id == docId }
+                    if (existing != null) deleteDocument(existing)
+                }
             }
         }
     }
@@ -587,7 +721,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     // Export PDF
     fun openExportDialog() {
         val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
-        val defaultName = "Scan_$dateStr"
+        val defaultName = _uiState.value.currentDocumentTitle.ifBlank { "Scan_$dateStr" }
         _uiState.update {
             it.copy(
                 isExportDialogOpen = true,
@@ -595,6 +729,47 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 lastExportedFile = null
             )
         }
+    }
+
+    fun openExportDialogForDocument(doc: ScannedDocument) {
+        _uiState.update {
+            it.copy(
+                currentDocumentId = doc.id,
+                currentDocumentTitle = doc.title,
+                currentPages = doc.pages,
+                isExportDialogOpen = true,
+                exportFilename = doc.title,
+                selectedQuality = doc.pdfQuality,
+                lastExportedFile = null
+            )
+        }
+    }
+
+    fun loadDocumentForEditingById(documentId: String) {
+        val doc = _uiState.value.savedDocuments.find { it.id == documentId }
+        if (doc != null) {
+            loadDocumentForEditing(doc)
+        }
+    }
+
+    fun renameDocument(docId: String, newTitle: String) {
+        val cleanTitle = newTitle.trim()
+        if (cleanTitle.isBlank()) return
+        val updated = _uiState.value.savedDocuments.map { doc ->
+            if (doc.id == docId) {
+                doc.copy(title = cleanTitle, updatedAt = System.currentTimeMillis())
+            } else {
+                doc
+            }
+        }
+        _uiState.update {
+            it.copy(
+                savedDocuments = updated,
+                currentDocumentTitle = if (it.currentDocumentId == docId) cleanTitle else it.currentDocumentTitle,
+                infoMessage = "Document renamed to $cleanTitle"
+            )
+        }
+        persistDocuments(updated)
     }
 
     fun closeExportDialog() {
@@ -622,13 +797,16 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             if (pdfFile != null && pdfFile.exists()) {
                 val docId = _uiState.value.currentDocumentId ?: java.util.UUID.randomUUID().toString()
                 val existingDoc = _uiState.value.savedDocuments.find { it.id == docId }
+                val now = System.currentTimeMillis()
                 val newDoc = ScannedDocument(
                     id = docId,
-                    title = filename,
-                    createdAt = existingDoc?.createdAt ?: System.currentTimeMillis(),
+                    title = filename.removeSuffix(".pdf"),
+                    createdAt = existingDoc?.createdAt ?: now,
+                    updatedAt = now,
                     pages = pages,
                     lastPdfPath = pdfFile.absolutePath,
-                    pdfFileSizeBytes = pdfFile.length()
+                    pdfFileSizeBytes = pdfFile.length(),
+                    pdfQuality = quality
                 )
                 val updatedDocs = listOf(newDoc) + _uiState.value.savedDocuments.filter { it.id != docId }
                 persistDocuments(updatedDocs)
@@ -637,9 +815,10 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     it.copy(
                         isLoading = false,
                         currentDocumentId = docId,
-                        currentDocumentTitle = filename,
+                        currentDocumentTitle = filename.removeSuffix(".pdf"),
                         savedDocuments = updatedDocs,
-                        lastExportedFile = pdfFile
+                        lastExportedFile = pdfFile,
+                        infoMessage = "PDF generated and saved in PDF Files screen!"
                     )
                 }
                 onSuccess(pdfFile)
@@ -658,9 +837,45 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun deleteDocument(doc: ScannedDocument) {
-        doc.lastPdfPath?.let { File(it).delete() }
+        doc.lastPdfPath?.let { path ->
+            val f = File(path)
+            if (f.exists()) f.delete()
+        }
+        for (page in doc.pages) {
+            File(page.processedImagePath).delete()
+            File(page.originalImagePath).delete()
+        }
         val updated = _uiState.value.savedDocuments.filter { it.id != doc.id }
-        _uiState.update { it.copy(savedDocuments = updated) }
+        val isCurrent = _uiState.value.currentDocumentId == doc.id
+        _uiState.update {
+            it.copy(
+                savedDocuments = updated,
+                currentPages = if (isCurrent) emptyList() else it.currentPages,
+                currentDocumentId = if (isCurrent) null else it.currentDocumentId,
+                infoMessage = "Document deleted"
+            )
+        }
         persistDocuments(updated)
+    }
+
+    fun deletePdfFile(pdfItem: GeneratedPdfItem) {
+        val file = File(pdfItem.filePath)
+        if (file.exists()) {
+            file.delete()
+        }
+        val updatedDocs = _uiState.value.savedDocuments.map { doc ->
+            if (doc.lastPdfPath == pdfItem.filePath || doc.id == pdfItem.documentId) {
+                doc.copy(lastPdfPath = null, pdfFileSizeBytes = 0L)
+            } else {
+                doc
+            }
+        }
+        _uiState.update {
+            it.copy(
+                savedDocuments = updatedDocs,
+                infoMessage = "PDF file deleted"
+            )
+        }
+        persistDocuments(updatedDocs)
     }
 }

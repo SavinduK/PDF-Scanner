@@ -54,9 +54,28 @@ data class ScannedDocument(
     val id: String = java.util.UUID.randomUUID().toString(),
     val title: String,
     val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
     val pages: List<ScannedPage> = emptyList(),
     val lastPdfPath: String? = null,
-    val pdfFileSizeBytes: Long = 0L
+    val pdfFileSizeBytes: Long = 0L,
+    val pdfQuality: PdfQuality = PdfQuality.MEDIUM
+)
+
+enum class HomeTab(val title: String) {
+    DOCUMENTS("Document Mode"),
+    PDF_FILES("PDF Files")
+}
+
+data class GeneratedPdfItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val documentId: String? = null,
+    val documentTitle: String = "",
+    val filePath: String,
+    val fileName: String,
+    val fileSizeBytes: Long = 0L,
+    val pageCount: Int = 0,
+    val lastModified: Long = System.currentTimeMillis(),
+    val quality: PdfQuality = PdfQuality.MEDIUM
 )
 
 enum class ScreenState {
@@ -66,3 +85,4 @@ enum class ScreenState {
     FILTER_ENHANCE,
     PAGE_LIST
 }
+
