@@ -19,10 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.RotateRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -100,6 +101,18 @@ fun CropAdjustScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(
+                        onClick = { viewModel.exitCropAdjust() },
+                        modifier = Modifier.testTag("crop_exit_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Exit",
+                            tint = Color.White
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color(0xFF141D1B)
                 )
@@ -143,7 +156,7 @@ fun CropAdjustScreen(
 
                         // Rotate 90 deg
                         CropActionButton(
-                            icon = Icons.Default.RotateRight,
+                            icon = Icons.AutoMirrored.Filled.RotateRight,
                             label = "Rotate",
                             onClick = { viewModel.rotateActivePage() },
                             testTag = "crop_rotate_btn",

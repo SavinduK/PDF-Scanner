@@ -17,6 +17,7 @@ import com.example.processing.EdgeDetector
 import com.example.processing.ImageFilterEngine
 import com.example.processing.ImageUtils
 import com.example.processing.PdfGenerator
+import com.example.processing.PdfImporter
 import com.example.processing.PerspectiveTransformer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +32,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 data class ScannerUiState(
     val currentScreen: ScreenState = ScreenState.HOME,
@@ -58,7 +60,11 @@ data class ScannerUiState(
     val lastExportedFile: File? = null,
 
     // Batch processing queue for multi-import
-    val pendingImportUris: List<Uri> = emptyList()
+    val pendingImportUris: List<Uri> = emptyList(),
+
+    // Camera flash & continuous mode
+    val isFlashEnabled: Boolean = false,
+    val isContinuousMode: Boolean = false
 )
 
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
@@ -142,7 +148,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 val docId = obj.optString("id", java.util.UUID.randomUUID().toString())
                 val title = obj.optString("title", "Untitled")
                 val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
-                val pdfPath = obj.optString("pdfPath", null)
+                val pdfPath = if (obj.has("pdfPath") && !obj.isNull("pdfPath")) obj.getString("pdfPath") else null
                 val fileSize = obj.optLong("fileSize", 0L)
 
                 val pagesArray = obj.optJSONArray("pages")
@@ -308,17 +314,29 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 val updatedPages = _uiState.value.currentPages + newPage
                 val newIndex = updatedPages.size - 1
 
-                _uiState.update {
-                    it.copy(
-                        currentPages = updatedPages,
-                        activePageIndex = newIndex,
-                        activeOriginalBitmap = bitmap,
-                        activeCropQuad = quad,
-                        activeFilterType = FilterType.ORIGINAL,
-                        activePreviewBitmap = filtered,
-                        isLoading = false,
-                        currentScreen = ScreenState.CROP_ADJUST
-                    )
+                if (_uiState.value.isContinuousMode) {
+                    // In continuous mode, keep in camera ready for next capture with flash preserved
+                    _uiState.update {
+                        it.copy(
+                            currentPages = updatedPages,
+                            activePageIndex = newIndex,
+                            isLoading = false,
+                            currentScreen = ScreenState.CAMERA
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            currentPages = updatedPages,
+                            activePageIndex = newIndex,
+                            activeOriginalBitmap = bitmap,
+                            activeCropQuad = quad,
+                            activeFilterType = FilterType.ORIGINAL,
+                            activePreviewBitmap = filtered,
+                            isLoading = false,
+                            currentScreen = ScreenState.CROP_ADJUST
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to process image") }
@@ -477,9 +495,9 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Saves changes to current page and goes to PAGE_LIST
+     * Saves changes to current page and goes to specified screen
      */
-    fun saveActivePageChanges() {
+    fun saveActivePageChanges(navigateTo: ScreenState = ScreenState.PAGE_LIST) {
         val filtered = _uiState.value.activePreviewBitmap ?: return
         val idx = _uiState.value.activePageIndex
         val currentList = _uiState.value.currentPages.toMutableList()
@@ -501,10 +519,38 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update {
                 it.copy(
                     currentPages = currentList,
+                    activeOriginalBitmap = null,
+                    activePreviewBitmap = null,
+                    activePageIndex = -1,
                     isLoading = false,
-                    currentScreen = ScreenState.PAGE_LIST
+                    currentScreen = navigateTo
                 )
             }
+        }
+    }
+
+    /**
+     * Trigger capture of next image immediately (keeping flash state intact)
+     */
+    fun saveActivePageAndScanNext() {
+        saveActivePageChanges(navigateTo = ScreenState.CAMERA)
+    }
+
+    /**
+     * Save active page and exit scan flow to page review list
+     */
+    fun saveActivePageAndExit() {
+        saveActivePageChanges(navigateTo = ScreenState.PAGE_LIST)
+    }
+
+    fun exitCropAdjust() {
+        _uiState.update {
+            it.copy(
+                activeOriginalBitmap = null,
+                activePreviewBitmap = null,
+                activePageIndex = -1,
+                currentScreen = if (it.currentPages.isNotEmpty()) ScreenState.PAGE_LIST else ScreenState.HOME
+            )
         }
     }
 
@@ -662,5 +708,95 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val updated = _uiState.value.savedDocuments.filter { it.id != doc.id }
         _uiState.update { it.copy(savedDocuments = updated) }
         persistDocuments(updated)
+    }
+
+    // Flash and continuous scan controls
+    fun toggleFlash() {
+        _uiState.update { it.copy(isFlashEnabled = !it.isFlashEnabled) }
+    }
+
+    fun setFlash(enabled: Boolean) {
+        _uiState.update { it.copy(isFlashEnabled = enabled) }
+    }
+
+    fun toggleContinuousMode() {
+        _uiState.update { it.copy(isContinuousMode = !it.isContinuousMode) }
+    }
+
+    // PDF Import feature
+    fun importPdf(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, loadingMessage = "Importing PDF document...") }
+            try {
+                val context = getApplication<Application>()
+                val (pdfPath, pages) = PdfImporter.importPdf(context, uri)
+                if (pages.isEmpty()) {
+                    throw Exception("No renderable pages found in PDF")
+                }
+                val pdfFile = File(pdfPath)
+                val docTitle = pdfFile.nameWithoutExtension.ifBlank { "Imported Document" }
+                val docId = UUID.randomUUID().toString()
+
+                val doc = ScannedDocument(
+                    id = docId,
+                    title = docTitle,
+                    createdAt = System.currentTimeMillis(),
+                    pages = pages,
+                    lastPdfPath = pdfPath,
+                    pdfFileSizeBytes = pdfFile.length()
+                )
+
+                val updatedList = _uiState.value.savedDocuments.toMutableList().apply {
+                    add(0, doc)
+                }
+                _uiState.update {
+                    it.copy(
+                        savedDocuments = updatedList,
+                        isLoading = false,
+                        currentDocumentId = docId,
+                        currentDocumentTitle = docTitle,
+                        currentPages = pages,
+                        errorMessage = null
+                    )
+                }
+                persistDocuments(updatedList)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to import PDF: ${e.localizedMessage ?: e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun importPdfToCurrentSession(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, loadingMessage = "Importing pages from PDF...") }
+            try {
+                val context = getApplication<Application>()
+                val (_, pages) = PdfImporter.importPdf(context, uri)
+                if (pages.isEmpty()) {
+                    throw Exception("No renderable pages found in PDF")
+                }
+                val updatedPages = _uiState.value.currentPages + pages
+                _uiState.update {
+                    it.copy(
+                        currentPages = updatedPages,
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to import PDF pages: ${e.localizedMessage ?: e.message}"
+                    )
+                }
+            }
+        }
     }
 }

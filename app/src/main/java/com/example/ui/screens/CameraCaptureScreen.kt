@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.Badge
@@ -106,7 +107,7 @@ fun CameraCaptureScreen(
         }
     }
 
-    var isFlashEnabled by remember { mutableStateOf(false) }
+    val isFlashEnabled = uiState.isFlashEnabled
     var useFrontCamera by remember { mutableStateOf(false) }
     var captureTrigger by remember { mutableIntStateOf(0) }
 
@@ -121,7 +122,6 @@ fun CameraCaptureScreen(
                 useFrontCamera = useFrontCamera,
                 captureTrigger = captureTrigger,
                 onImageCaptured = { bmp ->
-                    isFlashEnabled = false
                     viewModel.onImageCaptured(bmp)
                 }
             )
@@ -184,7 +184,7 @@ fun CameraCaptureScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Flash toggle
                 IconButton(
-                    onClick = { isFlashEnabled = !isFlashEnabled },
+                    onClick = { viewModel.toggleFlash() },
                     modifier = Modifier
                         .size(44.dp)
                         .background(Color(0x66000000), CircleShape)
@@ -194,6 +194,24 @@ fun CameraCaptureScreen(
                         imageVector = if (isFlashEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
                         contentDescription = "Toggle Flash",
                         tint = if (isFlashEnabled) ScannerAccent else Color.White
+                    )
+                }
+
+                // Continuous / Multi-Page scan mode toggle
+                IconButton(
+                    onClick = { viewModel.toggleContinuousMode() },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(
+                            if (uiState.isContinuousMode) EmeraldPrimary.copy(alpha = 0.85f) else Color(0x66000000),
+                            CircleShape
+                        )
+                        .testTag("camera_continuous_mode_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Layers,
+                        contentDescription = "Continuous Mode",
+                        tint = Color.White
                     )
                 }
 
@@ -286,7 +304,7 @@ fun CameraCaptureScreen(
                 if (uiState.currentPages.isNotEmpty()) {
                     Box(
                         modifier = Modifier
-                            .size(52.dp)
+                            .size(56.dp)
                             .background(EmeraldPrimary, CircleShape)
                             .clickable { viewModel.navigateTo(ScreenState.PAGE_LIST) }
                             .testTag("camera_pages_counter_btn"),
@@ -300,14 +318,15 @@ fun CameraCaptureScreen(
                                 fontSize = 16.sp
                             )
                             Text(
-                                text = "done",
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 10.sp
+                                text = "Exit",
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp
                             )
                         }
                     }
                 } else {
-                    Spacer(modifier = Modifier.size(52.dp))
+                    Spacer(modifier = Modifier.size(56.dp))
                 }
             }
         }

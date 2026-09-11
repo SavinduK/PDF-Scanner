@@ -89,6 +89,14 @@ fun PageListScreen(
         }
     }
 
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.importPdfToCurrentSession(uri)
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -121,6 +129,16 @@ fun PageListScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                        modifier = Modifier.testTag("page_list_import_pdf_action_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = "Import PDF Pages",
+                            tint = EmeraldPrimary
+                        )
+                    }
                     IconButton(
                         onClick = {
                             val savedDoc = viewModel.saveCurrentDocumentSession()

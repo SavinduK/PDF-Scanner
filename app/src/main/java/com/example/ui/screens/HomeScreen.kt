@@ -90,6 +90,15 @@ fun HomeScreen(
         }
     }
 
+    // PDF document import launcher
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.importPdf(uri)
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -119,6 +128,18 @@ fun HomeScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(
+                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                        modifier = Modifier.testTag("home_import_pdf_action_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = "Import PDF",
+                            tint = EmeraldPrimary
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
@@ -136,10 +157,29 @@ fun HomeScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Import PDF button
+                    OutlinedButton(
+                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                            .testTag("home_import_pdf_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = "Import PDF",
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Import PDF", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+                    }
+
                     // Batch import from gallery
                     OutlinedButton(
                         onClick = {
@@ -149,17 +189,17 @@ fun HomeScreen(
                         },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp)
+                            .weight(0.9f)
+                            .height(50.dp)
                             .testTag("home_batch_import_btn")
                     ) {
                         Icon(
                             imageVector = Icons.Default.PhotoLibrary,
                             contentDescription = "Import Gallery",
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Import Photos", fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Photos", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
                     }
 
                     // Primary Scan Camera button
@@ -168,18 +208,18 @@ fun HomeScreen(
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
                         modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp)
+                            .weight(1.1f)
+                            .height(50.dp)
                             .testTag("home_camera_scan_btn")
                     ) {
                         Icon(
                             imageVector = Icons.Default.CameraAlt,
                             contentDescription = "Camera Scan",
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("New Scan", color = Color.White, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("New Scan", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
                     }
                 }
             }
@@ -237,6 +277,9 @@ fun HomeScreen(
                         galleryLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
+                    },
+                    onImportPdfClick = {
+                        pdfPickerLauncher.launch(arrayOf("application/pdf"))
                     }
                 )
             } else {
@@ -390,7 +433,8 @@ fun DocumentItemCard(
 @Composable
 fun EmptyStateView(
     onScanClick: () -> Unit,
-    onGalleryClick: () -> Unit
+    onGalleryClick: () -> Unit,
+    onImportPdfClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -426,7 +470,7 @@ fun EmptyStateView(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Capture receipts, documents, book pages, or import images to create multi-page PDFs with automatic edge deskewing and enhancement.",
+            text = "Capture receipts, documents, book pages, or import images and PDFs to create multi-page documents with automatic edge deskewing and enhancement.",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 20.sp,
@@ -440,7 +484,7 @@ fun EmptyStateView(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
             modifier = Modifier
-                .fillMaxWidth(0.8f)
+                .fillMaxWidth(0.85f)
                 .height(48.dp)
                 .testTag("empty_state_scan_btn")
         ) {
@@ -449,19 +493,34 @@ fun EmptyStateView(
             Text("Start Scanning", fontWeight = FontWeight.Bold, color = Color.White)
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        OutlinedButton(
+            onClick = onImportPdfClick,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .height(48.dp)
+                .testTag("empty_state_import_pdf_btn")
+        ) {
+            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = EmeraldPrimary)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Import PDF Document", fontWeight = FontWeight.SemiBold)
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         OutlinedButton(
             onClick = onGalleryClick,
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
-                .fillMaxWidth(0.8f)
+                .fillMaxWidth(0.85f)
                 .height(48.dp)
                 .testTag("empty_state_gallery_btn")
         ) {
             Icon(Icons.Default.PhotoLibrary, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Batch Import Gallery", fontWeight = FontWeight.SemiBold)
+            Text("Import from Photos", fontWeight = FontWeight.SemiBold)
         }
     }
 }

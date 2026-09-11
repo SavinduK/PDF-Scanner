@@ -69,6 +69,9 @@ fun CameraCaptureView(
         }
     }
 
+    var viewSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var viewfinderRect by remember { mutableStateOf<Rect?>(null) }
+
     // Bind camera lifecycle
     LaunchedEffect(useFrontCamera) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -118,13 +121,18 @@ fun CameraCaptureView(
             val executor = ContextCompat.getMainExecutor(context)
             capture.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
-                    try {
-                        camera?.cameraControl?.enableTorch(false)
-                    } catch (_: Exception) {}
-                    val bitmap = imageProxyToBitmap(image)
+                    val rawBitmap = imageProxyToBitmap(image)
                     image.close()
-                    if (bitmap != null) {
-                        onImageCaptured(bitmap)
+                    if (rawBitmap != null) {
+                        val vRect = viewfinderRect
+                        val vW = viewSize.width
+                        val vH = viewSize.height
+                        val finalBitmap = if (vRect != null && vW > 0 && vH > 0) {
+                            cropBitmapToViewfinder(rawBitmap, vRect, vW.toFloat(), vH.toFloat())
+                        } else {
+                            rawBitmap
+                        }
+                        onImageCaptured(finalBitmap)
                     }
                 }
 
@@ -167,6 +175,10 @@ fun CameraCaptureView(
             val bottom = top + frameH
 
             val frameRect = Rect(left, top, right, bottom)
+            if (viewfinderRect != frameRect || viewSize.width != w.toInt() || viewSize.height != h.toInt()) {
+                viewfinderRect = frameRect
+                viewSize = androidx.compose.ui.unit.IntSize(w.toInt(), h.toInt())
+            }
             val cornerRadius = CornerRadius(16.dp.toPx(), 16.dp.toPx())
 
             // Dim outside viewfinder
@@ -247,6 +259,43 @@ private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
         if (rotated != bitmap) bitmap.recycle()
         rotated
     } else {
+        bitmap
+    }
+}
+
+private fun cropBitmapToViewfinder(
+    bitmap: Bitmap,
+    rect: Rect,
+    viewWidth: Float,
+    viewHeight: Float
+): Bitmap {
+    val bw = bitmap.width.toFloat()
+    val bh = bitmap.height.toFloat()
+    if (bw <= 0 || bh <= 0 || viewWidth <= 0 || viewHeight <= 0) return bitmap
+
+    // PreviewView uses ScaleType.FILL_CENTER
+    val scale = maxOf(viewWidth / bw, viewHeight / bh)
+    val scaledW = bw * scale
+    val scaledH = bh * scale
+    val offsetX = (viewWidth - scaledW) / 2f
+    val offsetY = (viewHeight - scaledH) / 2f
+
+    val x1 = (((rect.left - offsetX) / scale).toInt()).coerceIn(0, bitmap.width - 1)
+    val y1 = (((rect.top - offsetY) / scale).toInt()).coerceIn(0, bitmap.height - 1)
+    val x2 = (((rect.right - offsetX) / scale).toInt()).coerceIn(x1 + 10, bitmap.width)
+    val y2 = (((rect.bottom - offsetY) / scale).toInt()).coerceIn(y1 + 10, bitmap.height)
+
+    val cropW = x2 - x1
+    val cropH = y2 - y1
+
+    return try {
+        val cropped = Bitmap.createBitmap(bitmap, x1, y1, cropW, cropH)
+        if (cropped != bitmap) {
+            bitmap.recycle()
+        }
+        cropped
+    } catch (e: Exception) {
+        e.printStackTrace()
         bitmap
     }
 }
