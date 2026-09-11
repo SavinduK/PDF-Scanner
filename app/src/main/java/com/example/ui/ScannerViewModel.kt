@@ -1,9 +1,13 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.model.CropQuad
@@ -708,6 +712,61 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val updated = _uiState.value.savedDocuments.filter { it.id != doc.id }
         _uiState.update { it.copy(savedDocuments = updated) }
         persistDocuments(updated)
+    }
+
+    /**
+     * Saves the document PDF file to public device storage (Downloads/PDFScanner)
+     */
+    fun savePdfToDeviceStorage(context: Context, document: ScannedDocument, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pdfPath = document.lastPdfPath
+            if (pdfPath == null || !File(pdfPath).exists()) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "PDF file not found on device")
+                }
+                return@launch
+            }
+            val sourceFile = File(pdfPath)
+            try {
+                val cleanTitle = document.title.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank { "Scan_${System.currentTimeMillis()}" }
+                val fileName = if (cleanTitle.endsWith(".pdf", ignoreCase = true)) cleanTitle else "$cleanTitle.pdf"
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/PDFScanner")
+                    }
+                    val resolver = context.contentResolver
+                    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    if (uri != null) {
+                        resolver.openOutputStream(uri)?.use { out ->
+                            sourceFile.inputStream().use { input ->
+                                input.copyTo(out)
+                            }
+                        }
+                        withContext(Dispatchers.Main) {
+                            onResult(true, "Saved to Downloads/PDFScanner/$fileName")
+                        }
+                        return@launch
+                    }
+                }
+
+                // Fallback for older Android or direct file system write
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val targetDir = File(downloadsDir, "PDFScanner").apply { mkdirs() }
+                val targetFile = File(targetDir, fileName)
+                sourceFile.copyTo(targetFile, overwrite = true)
+                withContext(Dispatchers.Main) {
+                    onResult(true, "Saved to Downloads/PDFScanner/$fileName")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Failed to save to device: ${e.localizedMessage ?: e.message}")
+                }
+            }
+        }
     }
 
     // Flash and continuous scan controls

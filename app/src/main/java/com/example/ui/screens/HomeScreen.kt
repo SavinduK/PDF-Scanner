@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +31,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -41,6 +44,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -50,12 +55,18 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -81,6 +92,8 @@ fun HomeScreen(
     viewModel: ScannerViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
     // Multi-select image picker for batch import (HEIC, JPG, PNG)
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
@@ -102,7 +115,7 @@ fun HomeScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
@@ -129,6 +142,19 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    // New scan icon (left of the import pdf icon)
+                    IconButton(
+                        onClick = { viewModel.startNewScanSession() },
+                        modifier = Modifier.testTag("home_new_scan_action_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "New Scan",
+                            tint = EmeraldPrimary
+                        )
+                    }
+
+                    // Import PDF icon
                     IconButton(
                         onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
                         modifier = Modifier.testTag("home_import_pdf_action_btn")
@@ -140,89 +166,10 @@ fun HomeScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
-        },
-        bottomBar = {
-            Surface(
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp,
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Import PDF button
-                    OutlinedButton(
-                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .testTag("home_import_pdf_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = "Import PDF",
-                            tint = EmeraldPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Import PDF", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
-                    }
-
-                    // Batch import from gallery
-                    OutlinedButton(
-                        onClick = {
-                            galleryLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(0.9f)
-                            .height(50.dp)
-                            .testTag("home_batch_import_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhotoLibrary,
-                            contentDescription = "Import Gallery",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Photos", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
-                    }
-
-                    // Primary Scan Camera button
-                    Button(
-                        onClick = { viewModel.startNewScanSession() },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                        modifier = Modifier
-                            .weight(1.1f)
-                            .height(50.dp)
-                            .testTag("home_camera_scan_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "Camera Scan",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("New Scan", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
-                    }
-                }
-            }
         }
     ) { paddingValues ->
         Column(
@@ -310,6 +257,11 @@ fun HomeScreen(
                                     if (file.exists()) viewModel.sharePdf(file)
                                 }
                             },
+                            onSaveToDevice = {
+                                viewModel.savePdfToDeviceStorage(context, doc) { _, message ->
+                                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                }
+                            },
                             onOpen = {
                                 if (doc.lastPdfPath != null && File(doc.lastPdfPath).exists()) {
                                     viewModel.viewPdf(File(doc.lastPdfPath))
@@ -331,6 +283,7 @@ fun DocumentItemCard(
     document: ScannedDocument,
     onEditPages: () -> Unit,
     onShare: () -> Unit,
+    onSaveToDevice: () -> Unit,
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -338,6 +291,9 @@ fun DocumentItemCard(
     val dateStr = dateFormat.format(Date(document.createdAt))
     val sizeKb = (document.pdfFileSizeBytes / 1024).coerceAtLeast(1)
     val pageCount = document.pages.size
+    val pageText = if (pageCount == 1) "1 page" else "$pageCount pages"
+
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(14.dp),
@@ -369,62 +325,128 @@ fun DocumentItemCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
+            // 3 separate lines: Title (large bold text), Date, and Size / no of pages
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp, end = 8.dp)
+            ) {
+                // Line 1: Title in large bold text
                 Text(
                     text = document.title,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
+                    fontSize = 17.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                // Line 2: Date
                 Text(
-                    text = if (pageCount > 0) "$pageCount page(s) • $dateStr • $sizeKb KB" else "$dateStr • $sizeKb KB",
-                    fontSize = 12.sp,
+                    text = dateStr,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-
-            // Edit / Add pages button
-            IconButton(
-                onClick = onEditPages,
-                modifier = Modifier.size(40.dp).testTag("doc_edit_pages_btn")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PostAdd,
-                    contentDescription = "Edit / Add Pages",
-                    tint = EmeraldPrimary,
-                    modifier = Modifier.size(22.dp)
+                Spacer(modifier = Modifier.height(3.dp))
+                // Line 3: Size / no of pages
+                Text(
+                    text = "$pageText • $sizeKb KB",
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                 )
             }
 
-            // Quick share button
-            IconButton(
-                onClick = onShare,
-                modifier = Modifier.size(40.dp).testTag("doc_share_btn")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Share,
-                    contentDescription = "Share PDF",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            // Single 3-dot icon triggering dropdown menu with edit, share, save to device, delete
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .testTag("doc_menu_btn_${document.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More Options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-            // Delete button
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(40.dp).testTag("doc_delete_btn")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete PDF",
-                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                    modifier = Modifier.size(20.dp)
-                )
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    modifier = Modifier.testTag("doc_dropdown_${document.id}")
+                ) {
+                    // Edit Pages
+                    DropdownMenuItem(
+                        text = { Text("Edit Pages") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = EmeraldPrimary
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onEditPages()
+                        },
+                        modifier = Modifier.testTag("doc_menu_edit_${document.id}")
+                    )
+
+                    // Share PDF
+                    DropdownMenuItem(
+                        text = { Text("Share PDF") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onShare()
+                        },
+                        modifier = Modifier.testTag("doc_menu_share_${document.id}")
+                    )
+
+                    // Save to Device Storage
+                    DropdownMenuItem(
+                        text = { Text("Save to Device Storage") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = null,
+                                tint = EmeraldPrimary
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onSaveToDevice()
+                        },
+                        modifier = Modifier.testTag("doc_menu_save_device_${document.id}")
+                    )
+
+                    // Delete
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        },
+                        modifier = Modifier.testTag("doc_menu_delete_${document.id}")
+                    )
+                }
             }
         }
     }
