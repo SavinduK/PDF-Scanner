@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -52,6 +54,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -81,6 +84,13 @@ fun PageListScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+
+    // Auto-save session on system back gesture
+    BackHandler {
+        viewModel.saveCurrentDocumentSession()
+        viewModel.navigateTo(ScreenState.HOME)
+    }
+
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris: List<Uri> ->
@@ -100,26 +110,22 @@ fun PageListScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = uiState.currentDocumentTitle.ifBlank { "Document Pages" },
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${uiState.currentPages.size} page(s) • Edit Mode",
-                            fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = uiState.currentDocumentTitle.ifBlank { "Document Pages" },
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 },
                 navigationIcon = {
                     IconButton(
-                        onClick = { viewModel.navigateTo(ScreenState.HOME) },
+                        onClick = {
+                            viewModel.saveCurrentDocumentSession()
+                            viewModel.navigateTo(ScreenState.HOME)
+                        },
                         modifier = Modifier.testTag("page_list_home_btn")
                     ) {
                         Icon(
@@ -129,130 +135,48 @@ fun PageListScreen(
                     }
                 },
                 actions = {
+                    // Share icon
                     IconButton(
-                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
-                        modifier = Modifier.testTag("page_list_import_pdf_action_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = "Import PDF Pages",
-                            tint = EmeraldPrimary
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            val savedDoc = viewModel.saveCurrentDocumentSession()
-                            if (savedDoc != null) {
-                                Toast.makeText(context, "Document saved to edit or add pages later!", Toast.LENGTH_SHORT).show()
-                            }
-                        },
+                        onClick = { viewModel.shareCurrentSessionPdf() },
                         enabled = uiState.currentPages.isNotEmpty(),
-                        modifier = Modifier.testTag("page_list_save_top_btn")
+                        modifier = Modifier.testTag("page_list_share_btn")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Save,
-                            contentDescription = "Save Document",
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share PDF",
                             tint = if (uiState.currentPages.isNotEmpty()) EmeraldPrimary else Color.Gray
                         )
                     }
+
+                    // Export icon
+                    IconButton(
+                        onClick = { viewModel.openExportDialog() },
+                        enabled = uiState.currentPages.isNotEmpty(),
+                        modifier = Modifier.testTag("page_list_export_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = "Export PDF",
+                            tint = if (uiState.currentPages.isNotEmpty()) EmeraldPrimary else Color.Gray
+                        )
+                    }
+
+                    // Scan icon (opens camera view to add new pages)
+                    IconButton(
+                        onClick = { viewModel.navigateTo(ScreenState.CAMERA) },
+                        modifier = Modifier.testTag("page_list_scan_camera_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Scan new pages",
+                            tint = EmeraldPrimary
+                        )
+                    }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
-        },
-        bottomBar = {
-            Surface(
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp,
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    // Action Row with perfectly aligned buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Add via Camera
-                        PageListActionButton(
-                            icon = Icons.Default.CameraAlt,
-                            label = "+ Camera",
-                            onClick = { viewModel.navigateTo(ScreenState.CAMERA) },
-                            testTag = "page_list_add_camera_btn",
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        // Add via Gallery
-                        PageListActionButton(
-                            icon = Icons.Default.PhotoLibrary,
-                            label = "+ Gallery",
-                            onClick = {
-                                galleryLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            },
-                            testTag = "page_list_add_gallery_btn",
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        // Save Edit Session
-                        PageListActionButton(
-                            icon = Icons.Default.Save,
-                            label = "Save",
-                            onClick = {
-                                val doc = viewModel.saveCurrentDocumentSession()
-                                if (doc != null) {
-                                    Toast.makeText(context, "Document saved for later editing", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            testTag = "page_list_save_session_btn",
-                            modifier = Modifier.weight(0.9f)
-                        )
-
-                        // Export PDF
-                        Button(
-                            onClick = { viewModel.openExportDialog() },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = EmeraldPrimary,
-                                disabledContainerColor = EmeraldPrimary.copy(alpha = 0.4f)
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            enabled = uiState.currentPages.isNotEmpty(),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                            modifier = Modifier
-                                .weight(1.3f)
-                                .height(48.dp)
-                                .testTag("page_list_export_pdf_btn")
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PictureAsPdf,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Export PDF",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.5.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
-            }
         }
     ) { paddingValues ->
         if (uiState.currentPages.isEmpty()) {
@@ -298,48 +222,6 @@ fun PageListScreen(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun PageListActionButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    testTag: String,
-    modifier: Modifier = Modifier
-) {
-    OutlinedButton(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
-        modifier = modifier
-            .height(48.dp)
-            .testTag(testTag)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }

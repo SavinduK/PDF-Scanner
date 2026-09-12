@@ -703,6 +703,22 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         PdfGenerator.sharePdf(getApplication(), file)
     }
 
+    fun shareCurrentSessionPdf() {
+        val pages = _uiState.value.currentPages
+        if (pages.isEmpty()) return
+
+        val existingDoc = _uiState.value.savedDocuments.find { it.id == _uiState.value.currentDocumentId }
+        val existingFile = existingDoc?.lastPdfPath?.let { File(it) }
+
+        if (existingFile != null && existingFile.exists() && existingDoc.pages == pages) {
+            sharePdf(existingFile)
+        } else {
+            generatePdf { file ->
+                sharePdf(file)
+            }
+        }
+    }
+
     fun viewPdf(file: File) {
         PdfGenerator.viewPdf(getApplication(), file)
     }
