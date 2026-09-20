@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -103,12 +104,21 @@ fun HomeScreen(
         }
     }
 
-    // PDF document import launcher
-    val pdfPickerLauncher = rememberLauncherForActivityResult(
+    val supportedDocumentMimes = arrayOf(
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/msword",
+        "application/vnd.ms-powerpoint",
+        "*/*"
+    )
+
+    // Document import launcher (PDF, DOCX, PPTX)
+    val documentPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            viewModel.importPdf(uri)
+            viewModel.importDocument(uri)
         }
     }
 
@@ -142,7 +152,7 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    // New scan icon (left of the import pdf icon)
+                    // New scan icon (left of the upload document icon)
                     IconButton(
                         onClick = { viewModel.startNewScanSession() },
                         modifier = Modifier.testTag("home_new_scan_action_btn")
@@ -154,14 +164,14 @@ fun HomeScreen(
                         )
                     }
 
-                    // Import PDF icon
+                    // Upload document button (PDF, DOCX, PPTX)
                     IconButton(
-                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                        onClick = { documentPickerLauncher.launch(supportedDocumentMimes) },
                         modifier = Modifier.testTag("home_import_pdf_action_btn")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = "Import PDF",
+                            imageVector = Icons.Default.Upload,
+                            contentDescription = "Upload Document",
                             tint = EmeraldPrimary
                         )
                     }
@@ -225,8 +235,8 @@ fun HomeScreen(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
                     },
-                    onImportPdfClick = {
-                        pdfPickerLauncher.launch(arrayOf("application/pdf"))
+                    onImportDocumentClick = {
+                        documentPickerLauncher.launch(supportedDocumentMimes)
                     }
                 )
             } else {
@@ -456,7 +466,7 @@ fun DocumentItemCard(
 fun EmptyStateView(
     onScanClick: () -> Unit,
     onGalleryClick: () -> Unit,
-    onImportPdfClick: () -> Unit
+    onImportDocumentClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -472,7 +482,7 @@ fun EmptyStateView(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = Icons.Default.PictureAsPdf,
+                    imageVector = Icons.Default.Description,
                     contentDescription = null,
                     tint = EmeraldPrimary,
                     modifier = Modifier.size(48.dp)
@@ -492,7 +502,7 @@ fun EmptyStateView(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Capture receipts, documents, book pages, or import images and PDFs to create multi-page documents with automatic edge deskewing and enhancement.",
+            text = "Capture receipts, documents, book pages, or upload PDF, Word (DOCX), or PowerPoint (PPTX) files to create and edit multi-page documents.",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 20.sp,
@@ -518,16 +528,16 @@ fun EmptyStateView(
         Spacer(modifier = Modifier.height(10.dp))
 
         OutlinedButton(
-            onClick = onImportPdfClick,
+            onClick = onImportDocumentClick,
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth(0.85f)
                 .height(48.dp)
                 .testTag("empty_state_import_pdf_btn")
         ) {
-            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = EmeraldPrimary)
+            Icon(Icons.Default.Upload, contentDescription = null, tint = EmeraldPrimary)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Import PDF Document", fontWeight = FontWeight.SemiBold)
+            Text("Upload Document (PDF, Word, PPT)", fontWeight = FontWeight.SemiBold)
         }
 
         Spacer(modifier = Modifier.height(10.dp))

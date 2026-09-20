@@ -798,15 +798,19 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(isContinuousMode = !it.isContinuousMode) }
     }
 
-    // PDF Import feature
+    // Document Import feature (PDF, DOCX, PPTX)
     fun importPdf(uri: Uri) {
+        importDocument(uri)
+    }
+
+    fun importDocument(uri: Uri) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, loadingMessage = "Importing PDF document...") }
+            _uiState.update { it.copy(isLoading = true, loadingMessage = "Importing document...") }
             try {
                 val context = getApplication<Application>()
                 val (pdfPath, pages) = PdfImporter.importPdf(context, uri)
                 if (pages.isEmpty()) {
-                    throw Exception("No renderable pages found in PDF")
+                    throw Exception("No renderable pages found in document")
                 }
                 val pdfFile = File(pdfPath)
                 val docTitle = pdfFile.nameWithoutExtension.ifBlank { "Imported Document" }
@@ -831,6 +835,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                         currentDocumentId = docId,
                         currentDocumentTitle = docTitle,
                         currentPages = pages,
+                        currentScreen = ScreenState.PAGE_LIST,
                         errorMessage = null
                     )
                 }
@@ -840,7 +845,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "Failed to import PDF: ${e.localizedMessage ?: e.message}"
+                        errorMessage = "Failed to import document: ${e.localizedMessage ?: e.message}"
                     )
                 }
             }
@@ -848,13 +853,17 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun importPdfToCurrentSession(uri: Uri) {
+        importDocumentToCurrentSession(uri)
+    }
+
+    fun importDocumentToCurrentSession(uri: Uri) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, loadingMessage = "Importing pages from PDF...") }
+            _uiState.update { it.copy(isLoading = true, loadingMessage = "Importing pages...") }
             try {
                 val context = getApplication<Application>()
                 val (_, pages) = PdfImporter.importPdf(context, uri)
                 if (pages.isEmpty()) {
-                    throw Exception("No renderable pages found in PDF")
+                    throw Exception("No renderable pages found in document")
                 }
                 val updatedPages = _uiState.value.currentPages + pages
                 _uiState.update {
