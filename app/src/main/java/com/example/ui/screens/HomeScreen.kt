@@ -297,9 +297,27 @@ fun DocumentItemCard(
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val dateFormat = SimpleDateFormat("MMM dd, yyyy • HH:mm", Locale.getDefault())
-    val dateStr = dateFormat.format(Date(document.createdAt))
-    val sizeKb = (document.pdfFileSizeBytes / 1024).coerceAtLeast(1)
+    // Format date as e.g. "15 SEP"
+    val dateStr = SimpleDateFormat("dd MMM", Locale.US).format(Date(document.createdAt)).uppercase()
+
+    // Format file size
+    val calculatedSizeBytes = if (document.pdfFileSizeBytes > 0L) {
+        document.pdfFileSizeBytes
+    } else if (document.lastPdfPath != null && File(document.lastPdfPath).exists()) {
+        File(document.lastPdfPath).length()
+    } else {
+        val totalPageBytes = document.pages.sumOf { page ->
+            val f = File(page.processedImagePath)
+            if (f.exists()) f.length() else 0L
+        }
+        if (totalPageBytes > 0L) totalPageBytes else (document.pages.size * 350L * 1024L)
+    }
+
+    val formattedSize = when {
+        calculatedSizeBytes >= 1024 * 1024 -> String.format(Locale.US, "%.1f MB", calculatedSizeBytes / (1024f * 1024f))
+        else -> "${(calculatedSizeBytes / 1024).coerceAtLeast(1)} KB"
+    }
+
     val pageCount = document.pages.size
     val pageText = if (pageCount == 1) "1 page" else "$pageCount pages"
 
@@ -335,13 +353,16 @@ fun DocumentItemCard(
                 }
             }
 
-            // 3 separate lines: Title (large bold text), Date, and Size / no of pages
+            // 3 separate lines:
+            // 1. title in bold text
+            // 2. date (eg 15 SEP )
+            // 3. file size and no of pages
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = 12.dp, end = 8.dp)
             ) {
-                // Line 1: Title in large bold text
+                // Line 1: Title in bold text
                 Text(
                     text = document.title,
                     fontWeight = FontWeight.Bold,
@@ -350,19 +371,20 @@ fun DocumentItemCard(
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                // Line 2: Date
+                Spacer(modifier = Modifier.height(3.dp))
+                // Line 2: Date (eg 15 SEP)
                 Text(
                     text = dateStr,
                     fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(3.dp))
-                // Line 3: Size / no of pages
+                // Line 3: File size and no of pages
                 Text(
-                    text = "$pageText • $sizeKb KB",
+                    text = "$formattedSize • $pageText",
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -535,9 +557,7 @@ fun EmptyStateView(
                 .height(48.dp)
                 .testTag("empty_state_import_pdf_btn")
         ) {
-            Icon(Icons.Default.Upload, contentDescription = null, tint = EmeraldPrimary)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Upload Document (PDF, Word, PPT)", fontWeight = FontWeight.SemiBold)
+            Text("Upload Document", fontWeight = FontWeight.SemiBold)
         }
 
         Spacer(modifier = Modifier.height(10.dp))

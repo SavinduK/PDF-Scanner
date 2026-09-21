@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Button
@@ -157,15 +158,15 @@ fun PageListScreen(
                         )
                     }
 
-                    // Export icon
+                    // Save / Export icon
                     IconButton(
                         onClick = { viewModel.openExportDialog() },
                         enabled = uiState.currentPages.isNotEmpty(),
                         modifier = Modifier.testTag("page_list_export_btn")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = "Export PDF",
+                            imageVector = Icons.Default.Save,
+                            contentDescription = "Save Document",
                             tint = if (uiState.currentPages.isNotEmpty()) EmeraldPrimary else Color.Gray
                         )
                     }
