@@ -24,7 +24,7 @@ class GreetingScreenshotTest {
   fun greeting_screenshot() {
     composeTestRule.setContent {
       MyApplicationTheme {
-        EmptyStateView(onScanClick = {}, onGalleryClick = {})
+        EmptyStateView(onScanClick = {}, onImportDocumentClick = {}, onGalleryClick = {})
       }
     }
 

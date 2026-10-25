@@ -34,9 +34,9 @@ enum class FilterType(val displayName: String) {
 }
 
 enum class PdfQuality(val label: String, val compressionQuality: Int, val description: String) {
-    HIGH("High Quality", 92, "Best for text & fine details (~1-3 MB/page)"),
+    HIGH("High Quality", 90, "Best for text & fine details (~1-3 MB/page)"),
     MEDIUM("Standard", 75, "Balanced size & clarity (~400-800 KB/page)"),
-    LOW("Compact", 50, "Smallest file size (~150-300 KB/page)")
+    LOW("Compact", 60, "Smallest file size (~150-300 KB/page)")
 }
 
 data class ScannedPage(

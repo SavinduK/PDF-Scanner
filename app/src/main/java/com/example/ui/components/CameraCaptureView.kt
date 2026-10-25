@@ -1,11 +1,11 @@
 package com.example.ui.components
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -19,9 +19,12 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -41,13 +45,18 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.ui.theme.ScannerAccent
 import com.example.ui.theme.ScannerCropHandle
 import java.nio.ByteBuffer
+import java.util.concurrent.Executors
+import kotlin.math.max
 
 @Composable
 fun CameraCaptureView(
@@ -62,6 +71,14 @@ fun CameraCaptureView(
 
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
     var camera: Camera? by remember { mutableStateOf(null) }
+    var qualityHint: String? by remember { mutableStateOf(null) }
+
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    DisposableEffect(Unit) {
+        onDispose {
+            analysisExecutor.shutdown()
+        }
+    }
 
     val previewView = remember {
         PreviewView(context).apply {
@@ -87,6 +104,24 @@ fun CameraCaptureView(
                     .build()
                 imageCapture = capture
 
+                var lastAnalyzedMs = 0L
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also { analysis ->
+                        analysis.setAnalyzer(analysisExecutor) { proxy ->
+                            val now = System.currentTimeMillis()
+                            if (now - lastAnalyzedMs >= 250L) {
+                                lastAnalyzedMs = now
+                                val hint = evaluateFrameQuality(proxy)
+                                ContextCompat.getMainExecutor(context).execute {
+                                    qualityHint = hint
+                                }
+                            }
+                            proxy.close()
+                        }
+                    }
+
                 val cameraSelector = if (useFrontCamera) {
                     CameraSelector.DEFAULT_FRONT_CAMERA
                 } else {
@@ -98,7 +133,8 @@ fun CameraCaptureView(
                     lifecycleOwner,
                     cameraSelector,
                     preview,
-                    capture
+                    capture,
+                    imageAnalysis
                 )
                 camera = boundCamera
             } catch (e: Exception) {
@@ -241,7 +277,101 @@ fun CameraCaptureView(
                 strokeWidth = 2.5.dp.toPx()
             )
         }
+
+        // Small non-blocking capture quality feedback hint
+        qualityHint?.let { hintText ->
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xAA000000),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 128.dp)
+                    .testTag("camera_quality_hint")
+            ) {
+                Text(
+                    text = hintText,
+                    color = Color(0xFFFFD54F),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                )
+            }
+        }
     }
+}
+
+/**
+ * Evaluates a downscaled Y-plane luminance buffer (~160px wide) from YUV_420_888 preview frames
+ * to check exposure (mean luminance) and motion/focus blur (variance of the 3x3 Laplacian).
+ */
+private fun evaluateFrameQuality(image: ImageProxy): String? {
+    val planes = image.planes
+    if (planes.isEmpty()) return null
+    val yPlane = planes[0]
+    val buffer = yPlane.buffer
+    val rowStride = yPlane.rowStride
+    val pixelStride = yPlane.pixelStride
+    val srcW = image.width
+    val srcH = image.height
+    if (srcW < 32 || srcH < 32) return null
+
+    // Sample central 70% region downscaled to ~160px wide
+    val cropLeft = (srcW * 0.15f).toInt()
+    val cropTop = (srcH * 0.15f).toInt()
+    val cropW = (srcW * 0.70f).toInt()
+    val cropH = (srcH * 0.70f).toInt()
+    val step = max(1, cropW / 160)
+    val dstW = cropW / step
+    val dstH = cropH / step
+    if (dstW < 10 || dstH < 10) return null
+
+    val lum = IntArray(dstW * dstH)
+    var lumSum = 0L
+    val limit = buffer.limit()
+
+    for (dy in 0 until dstH) {
+        val sy = cropTop + dy * step
+        val srcRowStart = sy * rowStride
+        val dstRowStart = dy * dstW
+        for (dx in 0 until dstW) {
+            val sx = cropLeft + dx * step
+            val pos = srcRowStart + sx * pixelStride
+            val yVal = if (pos in 0 until limit) (buffer.get(pos).toInt() and 0xFF) else 128
+            lum[dstRowStart + dx] = yVal
+            lumSum += yVal
+        }
+    }
+
+    val count = dstW * dstH
+    val meanLum = lumSum.toFloat() / count.toFloat()
+    if (meanLum < 60f) return "Too dark"
+    if (meanLum > 200f) return "Too bright"
+
+    // Compute variance of 3x3 discrete Laplacian: L = 4*c - (top + bottom + left + right)
+    var lapSum = 0.0
+    var lapSqSum = 0.0
+    var lapCount = 0
+    for (y in 1 until dstH - 1) {
+        val rPrev = (y - 1) * dstW
+        val rCurr = y * dstW
+        val rNext = (y + 1) * dstW
+        for (x in 1 until dstW - 1) {
+            val c = lum[rCurr + x]
+            val lap = (4 * c - lum[rPrev + x] - lum[rNext + x] - lum[rCurr + x - 1] - lum[rCurr + x + 1]).toDouble()
+            lapSum += lap
+            lapSqSum += lap * lap
+            lapCount++
+        }
+    }
+
+    if (lapCount > 0) {
+        val lapMean = lapSum / lapCount
+        val lapVariance = (lapSqSum / lapCount) - (lapMean * lapMean)
+        if (lapVariance < 90.0) {
+            return "Hold steady"
+        }
+    }
+    return null
 }
 
 private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
