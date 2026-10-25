@@ -17,12 +17,10 @@ import com.example.model.Point2D
 import com.example.model.ScannedDocument
 import com.example.model.ScannedPage
 import com.example.model.ScreenState
-import com.example.processing.EdgeDetector
 import com.example.processing.ImageFilterEngine
 import com.example.processing.ImageUtils
 import com.example.processing.PdfGenerator
 import com.example.processing.PdfImporter
-import com.example.processing.PerspectiveTransformer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +46,7 @@ data class ScannerUiState(
     // Active page editing state
     val activePageIndex: Int = -1,
     val activeOriginalBitmap: Bitmap? = null,
-    val activeCropQuad: CropQuad = CropQuad.defaultQuad(),
+    val activeRotationDegrees: Int = 0,
     val activeFilterType: FilterType = FilterType.ORIGINAL,
     val activePreviewBitmap: Bitmap? = null,
 
@@ -57,18 +55,13 @@ data class ScannerUiState(
     val loadingMessage: String = "",
     val errorMessage: String? = null,
 
-    // Export dialog
+    // Export dialog & optional ready-made ML Kit PDF
     val isExportDialogOpen: Boolean = false,
     val exportFilename: String = "",
     val selectedQuality: PdfQuality = PdfQuality.MEDIUM,
     val lastExportedFile: File? = null,
-
-    // Batch processing queue for multi-import
-    val pendingImportUris: List<Uri> = emptyList(),
-
-    // Camera flash & continuous mode
-    val isFlashEnabled: Boolean = false,
-    val isContinuousMode: Boolean = false
+    val mlKitReadyPdfPath: String? = null,
+    val isMlKitPdfInSync: Boolean = false
 )
 
 class ScannerViewModel(application: Application) : AndroidViewModel(application) {
@@ -108,7 +101,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val orig = obj.optString("originalImagePath", "")
         val proc = obj.optString("processedImagePath", "")
         if (!File(proc).exists() && !File(orig).exists()) return null
-        val pageId = obj.optString("id", java.util.UUID.randomUUID().toString())
+        val pageId = obj.optString("id", UUID.randomUUID().toString())
         val filterStr = obj.optString("filterType", "ORIGINAL")
         val filterType = try { FilterType.valueOf(filterStr) } catch (_: Exception) { FilterType.ORIGINAL }
         val rot = obj.optInt("rotationDegrees", 0)
@@ -118,13 +111,13 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val quadObj = obj.optJSONObject("cropQuad")
         val quad = if (quadObj != null) {
             CropQuad(
-                topLeft = Point2D(quadObj.optDouble("tlX", 0.05).toFloat(), quadObj.optDouble("tlY", 0.05).toFloat()),
-                topRight = Point2D(quadObj.optDouble("trX", 0.95).toFloat(), quadObj.optDouble("trY", 0.05).toFloat()),
-                bottomRight = Point2D(quadObj.optDouble("brX", 0.95).toFloat(), quadObj.optDouble("brY", 0.95).toFloat()),
-                bottomLeft = Point2D(quadObj.optDouble("blX", 0.05).toFloat(), quadObj.optDouble("blY", 0.95).toFloat())
+                topLeft = Point2D(quadObj.optDouble("tlX", 0.0).toFloat(), quadObj.optDouble("tlY", 0.0).toFloat()),
+                topRight = Point2D(quadObj.optDouble("trX", 1.0).toFloat(), quadObj.optDouble("trY", 0.0).toFloat()),
+                bottomRight = Point2D(quadObj.optDouble("brX", 1.0).toFloat(), quadObj.optDouble("brY", 1.0).toFloat()),
+                bottomLeft = Point2D(quadObj.optDouble("blX", 0.0).toFloat(), quadObj.optDouble("blY", 1.0).toFloat())
             )
         } else {
-            CropQuad.defaultQuad()
+            CropQuad.fullImage()
         }
 
         val finalOrig = if (File(orig).exists()) orig else proc
@@ -149,7 +142,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             val docs = mutableListOf<ScannedDocument>()
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                val docId = obj.optString("id", java.util.UUID.randomUUID().toString())
+                val docId = obj.optString("id", UUID.randomUUID().toString())
                 val title = obj.optString("title", "Untitled")
                 val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                 val pdfPath = if (obj.has("pdfPath") && !obj.isNull("pdfPath")) obj.getString("pdfPath") else null
@@ -212,22 +205,136 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun showError(message: String) {
+        _uiState.update { it.copy(errorMessage = message) }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
     fun navigateTo(screen: ScreenState) {
         _uiState.update { it.copy(currentScreen = screen, errorMessage = null) }
     }
 
-    fun startNewScanSession() {
-        val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
-        _uiState.update {
-            it.copy(
-                currentPages = emptyList(),
-                currentDocumentId = null,
-                currentDocumentTitle = "Doc_$dateStr",
-                activePageIndex = -1,
-                activeOriginalBitmap = null,
-                activePreviewBitmap = null,
-                currentScreen = ScreenState.CAMERA
-            )
+    /**
+     * Ingests cropped, perspective-corrected page JPEGs and the optional ready-made PDF
+     * returned by the ML Kit Document Scanner API.
+     */
+    fun onMlKitScanCompleted(
+        pageUris: List<Uri>,
+        readyPdfUri: Uri?,
+        startNewSession: Boolean
+    ) {
+        if (pageUris.isEmpty() && readyPdfUri == null) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    loadingMessage = "Importing ${pageUris.size.coerceAtLeast(1)} scanned page(s)...",
+                    errorMessage = null
+                )
+            }
+            try {
+                val context = getApplication<Application>()
+                val importedPages = mutableListOf<ScannedPage>()
+
+                for (i in pageUris.indices) {
+                    _uiState.update {
+                        it.copy(loadingMessage = "Processing page ${i + 1} of ${pageUris.size}...")
+                    }
+                    // 1. Copy ML Kit's cropped/perspective-corrected JPEG into app storage
+                    val origPath = ImageUtils.copyUriToAppStorage(
+                        context = context,
+                        uri = pageUris[i],
+                        subDir = "scans",
+                        prefix = "mlkit_orig",
+                        extension = "jpg"
+                    ) ?: continue
+
+                    // 2. Decode with existing subsampled ImageUtils
+                    val decoded = ImageUtils.loadBitmapFromFile(origPath) ?: continue
+                    val filtered = ImageFilterEngine.applyFilter(decoded, FilterType.ORIGINAL)
+                    val procPath = ImageUtils.saveBitmapToFile(context, filtered, 92) ?: origPath
+                    val pageWidth = filtered.width
+                    val pageHeight = filtered.height
+
+                    if (filtered != decoded) filtered.recycle()
+                    decoded.recycle()
+
+                    // 3. Add to document defaulting to ORIGINAL filter
+                    importedPages.add(
+                        ScannedPage(
+                            originalImagePath = origPath,
+                            processedImagePath = procPath,
+                            cropQuad = CropQuad.fullImage(),
+                            filterType = FilterType.ORIGINAL,
+                            rotationDegrees = 0,
+                            width = pageWidth,
+                            height = pageHeight
+                        )
+                    )
+                }
+
+                // Copy optional ready-made ML Kit PDF into app storage if provided
+                val copiedPdfPath = if (readyPdfUri != null) {
+                    ImageUtils.copyUriToAppStorage(
+                        context = context,
+                        uri = readyPdfUri,
+                        subDir = "mlkit_pdfs",
+                        prefix = "mlkit_ready",
+                        extension = "pdf"
+                    )
+                } else {
+                    null
+                }
+
+                if (importedPages.isEmpty() && copiedPdfPath != null) {
+                    // Fallback: if only a PDF was returned, render pages via PdfImporter
+                    val (_, renderedPages) = PdfImporter.importPdf(context, Uri.fromFile(File(copiedPdfPath)))
+                    importedPages.addAll(renderedPages)
+                }
+
+                if (importedPages.isEmpty()) {
+                    throw Exception("Failed to load scanned page images.")
+                }
+
+                val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
+                _uiState.update { state ->
+                    if (startNewSession) {
+                        state.copy(
+                            currentPages = importedPages,
+                            currentDocumentId = null,
+                            currentDocumentTitle = "Doc_$dateStr",
+                            activePageIndex = -1,
+                            activeOriginalBitmap = null,
+                            activePreviewBitmap = null,
+                            mlKitReadyPdfPath = copiedPdfPath,
+                            isMlKitPdfInSync = copiedPdfPath != null,
+                            isLoading = false,
+                            currentScreen = ScreenState.PAGE_LIST
+                        )
+                    } else {
+                        val wasEmpty = state.currentPages.isEmpty()
+                        state.copy(
+                            currentPages = state.currentPages + importedPages,
+                            currentDocumentTitle = state.currentDocumentTitle.ifBlank { "Doc_$dateStr" },
+                            mlKitReadyPdfPath = copiedPdfPath ?: state.mlKitReadyPdfPath,
+                            isMlKitPdfInSync = wasEmpty && copiedPdfPath != null,
+                            isLoading = false,
+                            currentScreen = ScreenState.PAGE_LIST
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.localizedMessage ?: "Failed to import scanned pages"
+                    )
+                }
+            }
         }
     }
 
@@ -235,7 +342,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         val pages = _uiState.value.currentPages
         if (pages.isEmpty()) return null
 
-        val docId = _uiState.value.currentDocumentId ?: java.util.UUID.randomUUID().toString()
+        val docId = _uiState.value.currentDocumentId ?: UUID.randomUUID().toString()
         val defaultTitle = _uiState.value.currentDocumentTitle.ifBlank {
             "Doc_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())}"
         }
@@ -275,168 +382,85 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 activePageIndex = -1,
                 activeOriginalBitmap = null,
                 activePreviewBitmap = null,
+                mlKitReadyPdfPath = null,
+                isMlKitPdfInSync = false,
                 currentScreen = ScreenState.PAGE_LIST
             )
         }
     }
 
-    fun openGalleryImport() {
-        // Navigates or initiates gallery multi-select
-    }
-
-    /**
-     * Called when a camera capture or single gallery image is acquired.
-     */
-    fun onImageCaptured(bitmap: Bitmap) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, loadingMessage = "Detecting document boundaries...") }
-            try {
-                val context = getApplication<Application>()
-                val origPath = ImageUtils.saveBitmapToFile(context, bitmap, 95)
-                    ?: throw Exception("Failed to save captured photo")
-
-                // Edge detection
-                val quad = EdgeDetector.detectEdges(bitmap)
-
-                // Perspective deskew
-                val deskewed = PerspectiveTransformer.transform(bitmap, quad)
-
-                // Default ORIGINAL filter
-                val filtered = ImageFilterEngine.applyFilter(deskewed, FilterType.ORIGINAL)
-                val processedPath = ImageUtils.saveBitmapToFile(context, filtered, 92)
-                    ?: throw Exception("Failed to save processed page")
-
-                val newPage = ScannedPage(
-                    originalImagePath = origPath,
-                    processedImagePath = processedPath,
-                    cropQuad = quad,
-                    filterType = FilterType.ORIGINAL,
-                    width = filtered.width,
-                    height = filtered.height
-                )
-
-                val updatedPages = _uiState.value.currentPages + newPage
-                val newIndex = updatedPages.size - 1
-
-                if (_uiState.value.isContinuousMode) {
-                    // In continuous mode, keep in camera ready for next capture with flash preserved
-                    _uiState.update {
-                        it.copy(
-                            currentPages = updatedPages,
-                            activePageIndex = newIndex,
-                            isLoading = false,
-                            currentScreen = ScreenState.CAMERA
-                        )
-                    }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            currentPages = updatedPages,
-                            activePageIndex = newIndex,
-                            activeOriginalBitmap = bitmap,
-                            activeCropQuad = quad,
-                            activeFilterType = FilterType.ORIGINAL,
-                            activePreviewBitmap = filtered,
-                            isLoading = false,
-                            currentScreen = ScreenState.CROP_ADJUST
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to process image") }
-            }
-        }
-    }
-
-    /**
-     * Batch import multiple images from gallery
-     */
-    fun onBatchImagesSelected(uris: List<Uri>) {
-        if (uris.isEmpty()) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, loadingMessage = "Importing ${uris.size} images...") }
-            val context = getApplication<Application>()
-            val newPages = mutableListOf<ScannedPage>()
-
-            for (i in uris.indices) {
-                _uiState.update {
-                    it.copy(loadingMessage = "Processing page ${i + 1} of ${uris.size}...")
-                }
-                val bmp = ImageUtils.loadBitmapFromUri(context, uris[i]) ?: continue
-                val origPath = ImageUtils.saveBitmapToFile(context, bmp, 95) ?: continue
-                val quad = EdgeDetector.detectEdges(bmp)
-                val deskewed = PerspectiveTransformer.transform(bmp, quad)
-                val filtered = ImageFilterEngine.applyFilter(deskewed, FilterType.ORIGINAL)
-                val processedPath = ImageUtils.saveBitmapToFile(context, filtered, 92) ?: continue
-
-                newPages.add(
-                    ScannedPage(
-                        originalImagePath = origPath,
-                        processedImagePath = processedPath,
-                        cropQuad = quad,
-                        filterType = FilterType.ORIGINAL,
-                        width = filtered.width,
-                        height = filtered.height
-                    )
-                )
-                deskewed.recycle()
-                filtered.recycle()
-                bmp.recycle()
-            }
-
-            val mergedPages = _uiState.value.currentPages + newPages
-            _uiState.update {
-                it.copy(
-                    currentPages = mergedPages,
-                    isLoading = false,
-                    currentScreen = ScreenState.PAGE_LIST
-                )
-            }
-        }
-    }
-
-    // Crop adjustment
-    fun updateCropCorner(cornerIndex: Int, newX: Float, newY: Float) {
-        val clampedX = newX.coerceIn(0f, 1f)
-        val clampedY = newY.coerceIn(0f, 1f)
-        val current = _uiState.value.activeCropQuad
-
-        val updated = when (cornerIndex) {
-            0 -> current.copy(topLeft = Point2D(clampedX, clampedY))
-            1 -> current.copy(topRight = Point2D(clampedX, clampedY))
-            2 -> current.copy(bottomRight = Point2D(clampedX, clampedY))
-            3 -> current.copy(bottomLeft = Point2D(clampedX, clampedY))
-            else -> current
-        }
-        _uiState.update { it.copy(activeCropQuad = updated) }
-    }
-
-    fun autoDetectActivePageEdges() {
-        val bmp = _uiState.value.activeOriginalBitmap ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, loadingMessage = "Auto-detecting edges...") }
-            val quad = EdgeDetector.detectEdges(bmp)
-            _uiState.update { it.copy(activeCropQuad = quad, isLoading = false) }
-        }
-    }
-
-    fun resetCropToFull() {
-        _uiState.update { it.copy(activeCropQuad = CropQuad.fullImage()) }
-    }
-
     fun rotateActivePage() {
         val bmp = _uiState.value.activeOriginalBitmap ?: return
-        val rotated = ImageUtils.rotateBitmap(bmp, 90f)
-        _uiState.update {
-            it.copy(
-                activeOriginalBitmap = rotated,
-                activeCropQuad = CropQuad.defaultQuad()
-            )
+        val newRotation = (_uiState.value.activeRotationDegrees + 90) % 360
+        val filterType = _uiState.value.activeFilterType
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, loadingMessage = "Rotating page...") }
+            try {
+                val rotated = ImageUtils.rotateBitmap(bmp, newRotation.toFloat())
+                val filtered = ImageFilterEngine.applyFilter(rotated, filterType)
+                if (filtered != rotated && rotated != bmp) rotated.recycle()
+                _uiState.update {
+                    it.copy(
+                        activeRotationDegrees = newRotation,
+                        activePreviewBitmap = filtered,
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
+            }
+        }
+    }
+
+    /**
+     * Rotates a page 90 degrees clockwise directly from the page list.
+     */
+    fun rotatePageAt(pageIndex: Int) {
+        val list = _uiState.value.currentPages.toMutableList()
+        if (pageIndex !in list.indices) return
+        val page = list[pageIndex]
+        val context = getApplication<Application>()
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, loadingMessage = "Rotating page...") }
+            try {
+                val origBmp = ImageUtils.loadBitmapFromFile(page.originalImagePath)
+                    ?: ImageUtils.loadBitmapFromFile(page.processedImagePath)
+                    ?: throw Exception("Page image not found")
+
+                val newRotation = (page.rotationDegrees + 90) % 360
+                val rotated = ImageUtils.rotateBitmap(origBmp, newRotation.toFloat())
+                val filtered = ImageFilterEngine.applyFilter(rotated, page.filterType)
+                val newProcPath = ImageUtils.saveBitmapToFile(context, filtered, 92)
+                    ?: throw Exception("Failed to save rotated page")
+
+                val newW = filtered.width
+                val newH = filtered.height
+                if (filtered != rotated && filtered != origBmp) filtered.recycle()
+                if (rotated != origBmp) rotated.recycle()
+                origBmp.recycle()
+
+                list[pageIndex] = page.copy(
+                    processedImagePath = newProcPath,
+                    rotationDegrees = newRotation,
+                    width = newW,
+                    height = newH
+                )
+                _uiState.update {
+                    it.copy(
+                        currentPages = list,
+                        isMlKitPdfInSync = false,
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
+            }
         }
     }
 
     fun saveActiveImageToGallery(context: Context, onResult: (Boolean, String) -> Unit) {
-        val bmp = _uiState.value.activeOriginalBitmap ?: run {
+        val bmp = _uiState.value.activePreviewBitmap ?: _uiState.value.activeOriginalBitmap ?: run {
             onResult(false, "No active image to save")
             return
         }
@@ -452,40 +476,15 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /**
-     * Confirms crop quadrilateral and advances to Filter screen
-     */
-    fun applyCropAndProceedToFilter() {
-        val bmp = _uiState.value.activeOriginalBitmap ?: return
-        val quad = _uiState.value.activeCropQuad
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, loadingMessage = "Deskewing document...") }
-            try {
-                val deskewed = PerspectiveTransformer.transform(bmp, quad)
-                val currentFilter = _uiState.value.activeFilterType
-                val filtered = ImageFilterEngine.applyFilter(deskewed, currentFilter)
-
-                _uiState.update {
-                    it.copy(
-                        activePreviewBitmap = filtered,
-                        isLoading = false,
-                        currentScreen = ScreenState.FILTER_ENHANCE
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
-            }
-        }
-    }
-
     fun selectFilter(filterType: FilterType) {
         val bmp = _uiState.value.activeOriginalBitmap ?: return
-        val quad = _uiState.value.activeCropQuad
+        val rotation = _uiState.value.activeRotationDegrees
         viewModelScope.launch {
             _uiState.update { it.copy(activeFilterType = filterType, isLoading = true, loadingMessage = "Applying filter...") }
             try {
-                val deskewed = PerspectiveTransformer.transform(bmp, quad)
-                val filtered = ImageFilterEngine.applyFilter(deskewed, filterType)
+                val rotated = ImageUtils.rotateBitmap(bmp, rotation.toFloat())
+                val filtered = ImageFilterEngine.applyFilter(rotated, filterType)
+                if (filtered != rotated && rotated != bmp) rotated.recycle()
                 _uiState.update {
                     it.copy(
                         activePreviewBitmap = filtered,
@@ -499,9 +498,12 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Saves changes to current page and goes to specified screen
+     * Saves filter/rotation changes to the active page and navigates to the target screen.
      */
-    fun saveActivePageChanges(navigateTo: ScreenState = ScreenState.PAGE_LIST) {
+    fun saveActivePageChanges(
+        navigateTo: ScreenState = ScreenState.PAGE_LIST,
+        onSaved: () -> Unit = {}
+    ) {
         val filtered = _uiState.value.activePreviewBitmap ?: return
         val idx = _uiState.value.activePageIndex
         val currentList = _uiState.value.currentPages.toMutableList()
@@ -509,13 +511,17 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, loadingMessage = "Saving page...") }
+            var modified = false
             val newProcessedPath = ImageUtils.saveBitmapToFile(context, filtered, 92)
             if (newProcessedPath != null && idx in currentList.indices) {
                 val orig = currentList[idx]
+                val newFilter = _uiState.value.activeFilterType
+                val newRotation = _uiState.value.activeRotationDegrees
+                modified = (newFilter != orig.filterType || newRotation != orig.rotationDegrees)
                 currentList[idx] = orig.copy(
                     processedImagePath = newProcessedPath,
-                    cropQuad = _uiState.value.activeCropQuad,
-                    filterType = _uiState.value.activeFilterType,
+                    filterType = newFilter,
+                    rotationDegrees = newRotation,
                     width = filtered.width,
                     height = filtered.height
                 )
@@ -526,34 +532,26 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     activeOriginalBitmap = null,
                     activePreviewBitmap = null,
                     activePageIndex = -1,
+                    isMlKitPdfInSync = if (modified) false else it.isMlKitPdfInSync,
                     isLoading = false,
                     currentScreen = navigateTo
                 )
             }
+            onSaved()
         }
     }
 
-    /**
-     * Trigger capture of next image immediately (keeping flash state intact)
-     */
-    fun saveActivePageAndScanNext() {
-        saveActivePageChanges(navigateTo = ScreenState.CAMERA)
-    }
-
-    /**
-     * Save active page and exit scan flow to page review list
-     */
     fun saveActivePageAndExit() {
         saveActivePageChanges(navigateTo = ScreenState.PAGE_LIST)
     }
 
-    fun exitCropAdjust() {
+    fun cancelPageEdit() {
         _uiState.update {
             it.copy(
                 activeOriginalBitmap = null,
                 activePreviewBitmap = null,
                 activePageIndex = -1,
-                currentScreen = if (it.currentPages.isNotEmpty()) ScreenState.PAGE_LIST else ScreenState.HOME
+                currentScreen = ScreenState.PAGE_LIST
             )
         }
     }
@@ -564,7 +562,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         if (fromIndex in list.indices && toIndex in list.indices) {
             val item = list.removeAt(fromIndex)
             list.add(toIndex, item)
-            _uiState.update { it.copy(currentPages = list) }
+            _uiState.update { it.copy(currentPages = list, isMlKitPdfInSync = false) }
         }
     }
 
@@ -575,33 +573,9 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update {
                 it.copy(
                     currentPages = list,
+                    isMlKitPdfInSync = false,
                     currentScreen = if (list.isEmpty()) ScreenState.HOME else ScreenState.PAGE_LIST
                 )
-            }
-        }
-    }
-
-    fun reCropPage(pageIndex: Int) {
-        val list = _uiState.value.currentPages
-        if (pageIndex !in list.indices) return
-        val page = list[pageIndex]
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, loadingMessage = "Loading page...") }
-            val origBmp = ImageUtils.loadBitmapFromFile(page.originalImagePath)
-            if (origBmp != null) {
-                _uiState.update {
-                    it.copy(
-                        activePageIndex = pageIndex,
-                        activeOriginalBitmap = origBmp,
-                        activeCropQuad = page.cropQuad,
-                        activeFilterType = page.filterType,
-                        isLoading = false,
-                        currentScreen = ScreenState.CROP_ADJUST
-                    )
-                }
-            } else {
-                _uiState.update { it.copy(isLoading = false, errorMessage = "Original image not found") }
             }
         }
     }
@@ -614,14 +588,16 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, loadingMessage = "Loading page...") }
             val origBmp = ImageUtils.loadBitmapFromFile(page.originalImagePath)
+                ?: ImageUtils.loadBitmapFromFile(page.processedImagePath)
             if (origBmp != null) {
-                val deskewed = PerspectiveTransformer.transform(origBmp, page.cropQuad)
-                val filtered = ImageFilterEngine.applyFilter(deskewed, page.filterType)
+                val rotated = ImageUtils.rotateBitmap(origBmp, page.rotationDegrees.toFloat())
+                val filtered = ImageFilterEngine.applyFilter(rotated, page.filterType)
+                if (filtered != rotated && rotated != origBmp) rotated.recycle()
                 _uiState.update {
                     it.copy(
                         activePageIndex = pageIndex,
                         activeOriginalBitmap = origBmp,
-                        activeCropQuad = page.cropQuad,
+                        activeRotationDegrees = page.rotationDegrees,
                         activeFilterType = page.filterType,
                         activePreviewBitmap = filtered,
                         isLoading = false,
@@ -637,7 +613,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     // Export PDF
     fun openExportDialog() {
         val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
-        val defaultName = "Scan_$dateStr"
+        val defaultName = _uiState.value.currentDocumentTitle.ifBlank { "Scan_$dateStr" }
         _uiState.update {
             it.copy(
                 isExportDialogOpen = true,
@@ -670,32 +646,79 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update { it.copy(isLoading = true, loadingMessage = "Generating multi-page PDF...") }
             val pdfFile = PdfGenerator.generatePdf(context, pages, filename, quality)
             if (pdfFile != null && pdfFile.exists()) {
-                val docId = _uiState.value.currentDocumentId ?: java.util.UUID.randomUUID().toString()
-                val existingDoc = _uiState.value.savedDocuments.find { it.id == docId }
-                val newDoc = ScannedDocument(
-                    id = docId,
-                    title = filename,
-                    createdAt = existingDoc?.createdAt ?: System.currentTimeMillis(),
-                    pages = pages,
-                    lastPdfPath = pdfFile.absolutePath,
-                    pdfFileSizeBytes = pdfFile.length()
-                )
-                val updatedDocs = listOf(newDoc) + _uiState.value.savedDocuments.filter { it.id != docId }
-                persistDocuments(updatedDocs)
-
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        currentDocumentId = docId,
-                        currentDocumentTitle = filename,
-                        savedDocuments = updatedDocs,
-                        lastExportedFile = pdfFile
-                    )
-                }
+                recordSavedPdf(pdfFile, filename, pages)
                 onSuccess(pdfFile)
             } else {
                 _uiState.update { it.copy(isLoading = false, errorMessage = "Failed to generate PDF") }
             }
+        }
+    }
+
+    /**
+     * Exports the optional ready-made PDF directly produced by ML Kit Document Scanner (result.pdf?.uri).
+     */
+    fun exportMlKitReadyPdf(onSuccess: (File) -> Unit = {}) {
+        val readyPath = _uiState.value.mlKitReadyPdfPath ?: return
+        val sourceFile = File(readyPath)
+        if (!sourceFile.exists()) {
+            _uiState.update { it.copy(errorMessage = "Ready-made scanner PDF is no longer available") }
+            return
+        }
+        val pages = _uiState.value.currentPages
+        val filename = _uiState.value.exportFilename.ifBlank { "Scan_${System.currentTimeMillis()}" }
+        val context = getApplication<Application>()
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, loadingMessage = "Saving ready-made PDF...") }
+            val exported = withContext(Dispatchers.IO) {
+                try {
+                    val pdfDir = File(context.getExternalFilesDir(null), "documents").apply {
+                        if (!exists()) mkdirs()
+                    }
+                    val sanitizedName = if (filename.endsWith(".pdf", ignoreCase = true)) {
+                        filename
+                    } else {
+                        "$filename.pdf"
+                    }
+                    val outFile = File(pdfDir, sanitizedName)
+                    sourceFile.copyTo(outFile, overwrite = true)
+                    outFile
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    null
+                }
+            }
+            if (exported != null && exported.exists()) {
+                recordSavedPdf(exported, filename, pages)
+                onSuccess(exported)
+            } else {
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Failed to export ready-made PDF") }
+            }
+        }
+    }
+
+    private fun recordSavedPdf(pdfFile: File, title: String, pages: List<ScannedPage>) {
+        val docId = _uiState.value.currentDocumentId ?: UUID.randomUUID().toString()
+        val existingDoc = _uiState.value.savedDocuments.find { it.id == docId }
+        val newDoc = ScannedDocument(
+            id = docId,
+            title = title,
+            createdAt = existingDoc?.createdAt ?: System.currentTimeMillis(),
+            pages = pages,
+            lastPdfPath = pdfFile.absolutePath,
+            pdfFileSizeBytes = pdfFile.length()
+        )
+        val updatedDocs = listOf(newDoc) + _uiState.value.savedDocuments.filter { it.id != docId }
+        persistDocuments(updatedDocs)
+
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                currentDocumentId = docId,
+                currentDocumentTitle = title,
+                savedDocuments = updatedDocs,
+                lastExportedFile = pdfFile
+            )
         }
     }
 
@@ -785,20 +808,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // Flash and continuous scan controls
-    fun toggleFlash() {
-        _uiState.update { it.copy(isFlashEnabled = !it.isFlashEnabled) }
-    }
-
-    fun setFlash(enabled: Boolean) {
-        _uiState.update { it.copy(isFlashEnabled = enabled) }
-    }
-
-    fun toggleContinuousMode() {
-        _uiState.update { it.copy(isContinuousMode = !it.isContinuousMode) }
-    }
-
-    // Document Import feature (PDF, DOCX, PPTX)
+    // Document Import feature (PDF, DOCX, PPTX) — kept unchanged
     fun importPdf(uri: Uri) {
         importDocument(uri)
     }
@@ -835,6 +845,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                         currentDocumentId = docId,
                         currentDocumentTitle = docTitle,
                         currentPages = pages,
+                        mlKitReadyPdfPath = null,
+                        isMlKitPdfInSync = false,
                         currentScreen = ScreenState.PAGE_LIST,
                         errorMessage = null
                     )
@@ -869,6 +881,7 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update {
                     it.copy(
                         currentPages = updatedPages,
+                        isMlKitPdfInSync = false,
                         isLoading = false
                     )
                 }

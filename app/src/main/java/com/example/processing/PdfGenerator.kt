@@ -63,10 +63,10 @@ object PdfGenerator {
                 val loadedBitmap = if (quality == PdfQuality.HIGH && File(pageData.originalImagePath).exists()) {
                     val origBmp = ImageUtils.loadBitmapFromFile(pageData.originalImagePath, maxDimension = decodeMaxDim)
                     if (origBmp != null) {
-                        val deskewed = PerspectiveTransformer.transform(origBmp, pageData.cropQuad)
-                        if (deskewed != origBmp) origBmp.recycle()
-                        val filtered = ImageFilterEngine.applyFilter(deskewed, pageData.filterType)
-                        if (filtered != deskewed) deskewed.recycle()
+                        val rotated = ImageUtils.rotateBitmap(origBmp, pageData.rotationDegrees.toFloat())
+                        if (rotated != origBmp) origBmp.recycle()
+                        val filtered = ImageFilterEngine.applyFilter(rotated, pageData.filterType)
+                        if (filtered != rotated) rotated.recycle()
                         filtered
                     } else {
                         ImageUtils.loadBitmapFromFile(pageData.processedImagePath, maxDimension = decodeMaxDim)

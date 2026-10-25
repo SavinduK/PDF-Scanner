@@ -1,11 +1,6 @@
 package com.example.ui.screens
 
-import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,7 +15,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,17 +26,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.FilterAlt
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -51,7 +41,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,7 +59,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -83,6 +71,7 @@ import com.example.model.ScannedPage
 import com.example.model.ScreenState
 import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
+import com.example.ui.components.rememberDocumentScannerLauncher
 import com.example.ui.theme.EmeraldPrimary
 import java.io.File
 
@@ -93,29 +82,25 @@ fun PageListScreen(
     viewModel: ScannerViewModel,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-
     // Auto-save session on system back gesture
     BackHandler {
         viewModel.saveCurrentDocumentSession()
         viewModel.navigateTo(ScreenState.HOME)
     }
 
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia()
-    ) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) {
-            viewModel.onBatchImagesSelected(uris)
+    // ML Kit Document Scanner launcher to append pages to the current document
+    val launchDocumentScanner = rememberDocumentScannerLauncher(
+        onScanSuccess = { pageUris, readyPdfUri ->
+            viewModel.onMlKitScanCompleted(
+                pageUris = pageUris,
+                readyPdfUri = readyPdfUri,
+                startNewSession = false
+            )
+        },
+        onError = { errorMsg ->
+            viewModel.showError(errorMsg)
         }
-    }
-
-    val pdfPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            viewModel.importPdfToCurrentSession(uri)
-        }
-    }
+    )
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -171,9 +156,9 @@ fun PageListScreen(
                         )
                     }
 
-                    // Scan icon (opens camera view to add new pages)
+                    // Scan icon (launches ML Kit Document Scanner to add pages)
                     IconButton(
-                        onClick = { viewModel.navigateTo(ScreenState.CAMERA) },
+                        onClick = launchDocumentScanner,
                         modifier = Modifier.testTag("page_list_scan_camera_btn")
                     ) {
                         Icon(
@@ -200,8 +185,9 @@ fun PageListScreen(
                     Text("No pages in current document", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
-                        onClick = { viewModel.navigateTo(ScreenState.CAMERA) },
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                        onClick = launchDocumentScanner,
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                        modifier = Modifier.testTag("page_list_add_first_btn")
                     ) {
                         Text("Add First Page")
                     }
@@ -313,7 +299,7 @@ fun PageListScreen(
                             pageNumber = index + 1,
                             isDragging = isDragging,
                             dragOffset = if (isDragging) dragOffset else Offset.Zero,
-                            onReCrop = { viewModel.reCropPage(index) },
+                            onRotate = { viewModel.rotatePageAt(index) },
                             onReFilter = { viewModel.reFilterPage(index) },
                             onDelete = { viewModel.deletePage(index) }
                         )
@@ -330,7 +316,7 @@ fun PageThumbnailCard(
     pageNumber: Int,
     isDragging: Boolean,
     dragOffset: Offset,
-    onReCrop: () -> Unit,
+    onRotate: () -> Unit,
     onReFilter: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -369,7 +355,7 @@ fun PageThumbnailCard(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxSize()
-                        .clickable { onReCrop() }
+                        .clickable { onReFilter() }
                 )
 
                 // Page number chip (Top-Left)
@@ -420,7 +406,7 @@ fun PageThumbnailCard(
                 }
             }
 
-            // Controls Bar under thumbnail: Re-crop, Re-filter, Hold & Drag handle
+            // Controls Bar under thumbnail: Rotate, Filter, Hold & Drag handle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -428,27 +414,27 @@ fun PageThumbnailCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Re-crop button
+                // Rotate 90° button
                 IconButton(
-                    onClick = onReCrop,
-                    modifier = Modifier.size(36.dp).testTag("page_recrop_btn_$pageNumber")
+                    onClick = onRotate,
+                    modifier = Modifier.size(36.dp).testTag("page_rotate_btn_$pageNumber")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Crop,
-                        contentDescription = "Re-crop",
+                        imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                        contentDescription = "Rotate Page",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
                 }
 
-                // Re-filter button
+                // Filter / Enhance button
                 IconButton(
                     onClick = onReFilter,
                     modifier = Modifier.size(36.dp).testTag("page_refilter_btn_$pageNumber")
                 ) {
                     Icon(
                         imageVector = Icons.Default.FilterAlt,
-                        contentDescription = "Re-filter",
+                        contentDescription = "Edit Filter",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )

@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,16 +18,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contrast
-import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterBAndW
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Button
@@ -35,7 +36,6 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,7 @@ import com.example.model.FilterType
 import com.example.model.ScreenState
 import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
+import com.example.ui.components.rememberDocumentScannerLauncher
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.ScannerAccent
 
@@ -67,7 +69,21 @@ fun FilterEnhanceScreen(
     viewModel: ScannerViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val previewBitmap = uiState.activePreviewBitmap
+
+    val launchDocumentScanner = rememberDocumentScannerLauncher(
+        onScanSuccess = { pageUris, readyPdfUri ->
+            viewModel.onMlKitScanCompleted(
+                pageUris = pageUris,
+                readyPdfUri = readyPdfUri,
+                startNewSession = false
+            )
+        },
+        onError = { errorMsg ->
+            viewModel.showError(errorMsg)
+        }
+    )
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -84,37 +100,53 @@ fun FilterEnhanceScreen(
                 },
                 navigationIcon = {
                     IconButton(
-                        onClick = { viewModel.navigateTo(ScreenState.CROP_ADJUST) },
-                        modifier = Modifier.testTag("filter_back_to_crop_btn")
+                        onClick = { viewModel.cancelPageEdit() },
+                        modifier = Modifier.testTag("filter_back_btn")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to Crop",
+                            contentDescription = "Back to Pages",
                             tint = Color.White
                         )
                     }
                 },
                 actions = {
-                    // Quick re-crop button
+                    // Rotate 90 degrees
                     IconButton(
-                        onClick = { viewModel.navigateTo(ScreenState.CROP_ADJUST) },
-                        modifier = Modifier.testTag("filter_recrop_action_btn")
+                        onClick = { viewModel.rotateActivePage() },
+                        modifier = Modifier.testTag("filter_rotate_action_btn")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Crop,
-                            contentDescription = "Re-crop",
+                            imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                            contentDescription = "Rotate Page",
                             tint = Color.White
                         )
                     }
 
-                    // Quick exit button
+                    // Save Image to Gallery
+                    IconButton(
+                        onClick = {
+                            viewModel.saveActiveImageToGallery(context) { _, message ->
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.testTag("filter_save_gallery_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Save Image to Gallery",
+                            tint = Color.White
+                        )
+                    }
+
+                    // Quick exit & save button
                     IconButton(
                         onClick = { viewModel.saveActivePageAndExit() },
                         modifier = Modifier.testTag("filter_top_exit_btn")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Exit to Document",
+                            contentDescription = "Save and Exit to Document",
                             tint = Color.White
                         )
                     }
@@ -178,12 +210,11 @@ fun FilterEnhanceScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Action buttons: Exit or Next
+                    // Action buttons: Done or Scan More
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Exit button: saves active page and exits scan flow
                         OutlinedButton(
                             onClick = { viewModel.saveActivePageAndExit() },
                             shape = RoundedCornerShape(12.dp),
@@ -196,22 +227,26 @@ fun FilterEnhanceScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = "Exit",
+                                contentDescription = "Save Page",
                                 tint = Color.White,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Exit",
+                                text = "Done",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
                             )
                         }
 
-                        // Next button: saves active page and immediately triggers next image capture (flash kept on)
                         Button(
-                            onClick = { viewModel.saveActivePageAndScanNext() },
+                            onClick = {
+                                viewModel.saveActivePageChanges(
+                                    navigateTo = ScreenState.PAGE_LIST,
+                                    onSaved = launchDocumentScanner
+                                )
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
@@ -221,13 +256,13 @@ fun FilterEnhanceScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Scan Next",
+                                contentDescription = "Scan More",
                                 tint = Color.White,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Next",
+                                text = "Scan More",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp

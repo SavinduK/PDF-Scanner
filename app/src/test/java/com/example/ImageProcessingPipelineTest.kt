@@ -1,20 +1,23 @@
 package com.example
 
+import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Path
+import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import com.example.model.FilterType
 import com.example.model.PdfQuality
 import com.example.model.ScannedPage
-import com.example.processing.EdgeDetector
+import com.example.model.ScreenState
+import com.example.processing.DocumentScannerManager
 import com.example.processing.ImageFilterEngine
 import com.example.processing.ImageUtils
 import com.example.processing.PdfGenerator
+import com.example.ui.ScannerViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,6 +25,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
+import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
 
 @RunWith(RobolectricTestRunner::class)
@@ -36,7 +41,6 @@ class ImageProcessingPipelineTest {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val pixels = IntArray(w * h)
 
-        // Simulate strong shadow across left-to-right (luminance 85 -> 230) with dark ink lines
         for (y in 0 until h) {
             for (x in 0 until w) {
                 val paperLum = 85 + (x * 145) / w
@@ -51,46 +55,55 @@ class ImageProcessingPipelineTest {
         val outPixels = IntArray(w * h)
         bw.getPixels(outPixels, 0, w, 0, 0, w, h)
 
-        // Shadowed paper on far left (x=20, y=50) should become pure white (255)
         val shadowPaper = outPixels[50 * w + 20] and 0xFF
         assertTrue("Shadowed paper should be whitened to 255, got $shadowPaper", shadowPaper == 255)
 
-        // Ink pixel in shadowed left side (x=60, y=102) should stay dark (< 55)
         val shadowInk = outPixels[102 * w + 60] and 0xFF
         assertTrue("Ink in shadowed region should remain dark, got $shadowInk", shadowInk < 55)
 
-        // Auto-enhance also runs cleanly without crashing or washing out ink
         val auto = ImageFilterEngine.applyFilter(bmp, FilterType.AUTO_ENHANCE)
         assertNotNull(auto)
     }
 
     @Test
-    fun `EdgeDetector Canny contour and full-res refinement accurately finds document quad`() = runBlocking {
-        val w = 1200
-        val h = 1600
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-        canvas.drawColor(Color.rgb(35, 38, 42)) // dark desk
+    fun `DocumentScannerManager options and ViewModel ML Kit scan ingestion copy pages as ORIGINAL`() = runBlocking {
+        assertNotNull(DocumentScannerManager.options)
 
-        // Draw skewed white sheet covering ~55% of frame
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(242, 242, 238)
-            style = Paint.Style.FILL
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val tempJpeg = File(app.cacheDir, "mock_mlkit_page.jpg")
+        val bmp = Bitmap.createBitmap(800, 1100, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.rgb(245, 245, 245))
         }
-        val path = Path().apply {
-            moveTo(180f, 200f)   // TL (0.15, 0.125)
-            lineTo(1020f, 220f)  // TR (0.85, 0.1375)
-            lineTo(1050f, 1400f) // BR (0.875, 0.875)
-            lineTo(150f, 1380f)  // BL (0.125, 0.8625)
-            close()
+        FileOutputStream(tempJpeg).use { out ->
+            bmp.compress(Bitmap.CompressFormat.JPEG, 92, out)
         }
-        canvas.drawPath(path, paint)
 
-        val quad = EdgeDetector.detectEdges(bmp)
-        assertTrue("TL x near 0.15, got ${quad.topLeft.x}", kotlin.math.abs(quad.topLeft.x - 0.15f) < 0.04f)
-        assertTrue("TL y near 0.125, got ${quad.topLeft.y}", kotlin.math.abs(quad.topLeft.y - 0.125f) < 0.04f)
-        assertTrue("BR x near 0.875, got ${quad.bottomRight.x}", kotlin.math.abs(quad.bottomRight.x - 0.875f) < 0.04f)
-        assertTrue("BR y near 0.875, got ${quad.bottomRight.y}", kotlin.math.abs(quad.bottomRight.y - 0.875f) < 0.04f)
+        val tempPdf = File(app.cacheDir, "mock_mlkit_ready.pdf")
+        tempPdf.writeBytes("%PDF-1.4\n%%EOF\n".toByteArray(StandardCharsets.US_ASCII))
+
+        val viewModel = ScannerViewModel(app)
+        viewModel.onMlKitScanCompleted(
+            pageUris = listOf(Uri.fromFile(tempJpeg)),
+            readyPdfUri = Uri.fromFile(tempPdf),
+            startNewSession = true
+        )
+
+        var attempts = 0
+        while ((viewModel.uiState.value.isLoading || viewModel.uiState.value.currentPages.isEmpty()) && attempts < 40) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            delay(25)
+            attempts++
+        }
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        val state = viewModel.uiState.value
+        assertEquals(ScreenState.PAGE_LIST, state.currentScreen)
+        assertEquals(1, state.currentPages.size)
+        assertEquals(FilterType.ORIGINAL, state.currentPages[0].filterType)
+        assertTrue(File(state.currentPages[0].originalImagePath).exists())
+        assertTrue(File(state.currentPages[0].processedImagePath).exists())
+        assertNotNull(state.mlKitReadyPdfPath)
+        assertTrue(File(state.mlKitReadyPdfPath!!).exists())
     }
 
     @Test

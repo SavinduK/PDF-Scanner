@@ -3,11 +3,7 @@ package com.example.ui.screens
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,28 +22,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,22 +55,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 import com.example.model.ScannedDocument
 import com.example.model.ScreenState
 import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
+import com.example.ui.components.rememberDocumentScannerLauncher
 import com.example.ui.theme.EmeraldPrimary
-import com.example.ui.theme.ScannerAccent
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -95,14 +82,19 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
 
-    // Multi-select image picker for batch import (HEIC, JPG, PNG)
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia()
-    ) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) {
-            viewModel.onBatchImagesSelected(uris)
+    // ML Kit Document Scanner launcher (handles both camera scan and gallery image import)
+    val launchDocumentScanner = rememberDocumentScannerLauncher(
+        onScanSuccess = { pageUris, readyPdfUri ->
+            viewModel.onMlKitScanCompleted(
+                pageUris = pageUris,
+                readyPdfUri = readyPdfUri,
+                startNewSession = true
+            )
+        },
+        onError = { errorMsg ->
+            viewModel.showError(errorMsg)
         }
-    }
+    )
 
     val supportedDocumentMimes = arrayOf(
         "application/pdf",
@@ -113,7 +105,7 @@ fun HomeScreen(
         "*/*"
     )
 
-    // Document import launcher (PDF, DOCX, PPTX)
+    // Document import launcher (PDF, DOCX, PPTX) — kept unchanged
     val documentPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -152,9 +144,9 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    // New scan icon (left of the upload document icon)
+                    // New scan icon (launches ML Kit Document Scanner)
                     IconButton(
-                        onClick = { viewModel.startNewScanSession() },
+                        onClick = launchDocumentScanner,
                         modifier = Modifier.testTag("home_new_scan_action_btn")
                     ) {
                         Icon(
@@ -229,12 +221,8 @@ fun HomeScreen(
 
             if (uiState.savedDocuments.isEmpty() && uiState.currentPages.isEmpty()) {
                 EmptyStateView(
-                    onScanClick = { viewModel.startNewScanSession() },
-                    onGalleryClick = {
-                        galleryLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
+                    onScanClick = launchDocumentScanner,
+                    onGalleryClick = launchDocumentScanner,
                     onImportDocumentClick = {
                         documentPickerLauncher.launch(supportedDocumentMimes)
                     }
@@ -362,7 +350,6 @@ fun DocumentItemCard(
                     .weight(1f)
                     .padding(start = 12.dp, end = 8.dp)
             ) {
-                // Line 1: Title in bold text
                 Text(
                     text = document.title,
                     fontWeight = FontWeight.Bold,
@@ -372,7 +359,6 @@ fun DocumentItemCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(3.dp))
-                // Line 2: Date (eg 15 SEP)
                 Text(
                     text = dateStr,
                     fontSize = 13.sp,
@@ -382,7 +368,6 @@ fun DocumentItemCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(3.dp))
-                // Line 3: File size and no of pages
                 Text(
                     text = "$formattedSize • $pageText",
                     fontSize = 13.sp,
@@ -392,7 +377,6 @@ fun DocumentItemCard(
                 )
             }
 
-            // Single 3-dot icon triggering dropdown menu with edit, share, save to device, delete
             Box {
                 IconButton(
                     onClick = { menuExpanded = true },
@@ -412,7 +396,6 @@ fun DocumentItemCard(
                     onDismissRequest = { menuExpanded = false },
                     modifier = Modifier.testTag("doc_dropdown_${document.id}")
                 ) {
-                    // Edit Pages
                     DropdownMenuItem(
                         text = { Text("Edit Pages") },
                         leadingIcon = {
@@ -429,7 +412,6 @@ fun DocumentItemCard(
                         modifier = Modifier.testTag("doc_menu_edit_${document.id}")
                     )
 
-                    // Share PDF
                     DropdownMenuItem(
                         text = { Text("Share PDF") },
                         leadingIcon = {
@@ -445,7 +427,6 @@ fun DocumentItemCard(
                         modifier = Modifier.testTag("doc_menu_share_${document.id}")
                     )
 
-                    // Save to Device Storage
                     DropdownMenuItem(
                         text = { Text("Save to Device Storage") },
                         leadingIcon = {
@@ -462,7 +443,6 @@ fun DocumentItemCard(
                         modifier = Modifier.testTag("doc_menu_save_device_${document.id}")
                     )
 
-                    // Delete
                     DropdownMenuItem(
                         text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                         leadingIcon = {

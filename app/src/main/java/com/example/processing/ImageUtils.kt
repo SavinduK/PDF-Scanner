@@ -9,11 +9,46 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.util.UUID
 
 object ImageUtils {
+
+    /**
+     * Copies a content:// or file:// Uri stream directly into app-private storage.
+     */
+    suspend fun copyUriToAppStorage(
+        context: Context,
+        uri: Uri,
+        subDir: String = "scans",
+        prefix: String = "mlkit",
+        extension: String = "jpg"
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val targetDir = File(context.filesDir, subDir).apply { if (!exists()) mkdirs() }
+            val destFile = File(targetDir, "${prefix}_${UUID.randomUUID()}.$extension")
+
+            val inputStream = context.contentResolver.openInputStream(uri)
+                ?: if (uri.scheme == "file" && !uri.path.isNullOrEmpty()) {
+                    FileInputStream(File(uri.path!!))
+                } else {
+                    null
+                }
+
+            inputStream?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                    output.flush()
+                }
+            } ?: return@withContext null
+
+            if (destFile.exists() && destFile.length() > 0L) destFile.absolutePath else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
 
     suspend fun loadBitmapFromUri(context: Context, uri: Uri, maxDimension: Int = 2400): Bitmap? =
         withContext(Dispatchers.IO) {
@@ -59,30 +94,7 @@ object ImageUtils {
                     BitmapFactory.decodeStream(stream, null, decodeOptions)
                 } ?: return@withContext null
 
-                val decodedBitmap: Bitmap = rawBitmap
-
-                // Apply EXIF rotation if needed
-                val rotationAngle = when (orientation) {
-                    ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                    ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                    ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                    else -> 0f
-                }
-
-                if (rotationAngle != 0f) {
-                    val matrix = Matrix().apply { postRotate(rotationAngle) }
-                    val rotated = Bitmap.createBitmap(
-                        decodedBitmap, 0, 0,
-                        decodedBitmap.width, decodedBitmap.height,
-                        matrix, true
-                    )
-                    if (rotated != decodedBitmap) {
-                        decodedBitmap.recycle()
-                    }
-                    rotated
-                } else {
-                    decodedBitmap
-                }
+                applyExifOrientation(rawBitmap, orientation)
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
@@ -94,6 +106,15 @@ object ImageUtils {
             try {
                 val file = File(filePath)
                 if (!file.exists()) return@withContext null
+
+                var orientation = ExifInterface.ORIENTATION_NORMAL
+                try {
+                    val exif = ExifInterface(filePath)
+                    orientation = exif.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                } catch (_: Exception) { }
 
                 val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeFile(filePath, options)
@@ -112,12 +133,29 @@ object ImageUtils {
                     inSampleSize = sampleSize
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
-                BitmapFactory.decodeFile(filePath, decodeOptions)
+                val decoded = BitmapFactory.decodeFile(filePath, decodeOptions) ?: return@withContext null
+                applyExifOrientation(decoded, orientation)
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
             }
         }
+
+    private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+        val rotationAngle = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+        if (rotationAngle == 0f) return bitmap
+        val matrix = Matrix().apply { postRotate(rotationAngle) }
+        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (rotated != bitmap) {
+            bitmap.recycle()
+        }
+        return rotated
+    }
 
     suspend fun saveBitmapToFile(context: Context, bitmap: Bitmap, quality: Int = 92): String? =
         withContext(Dispatchers.IO) {
@@ -136,8 +174,9 @@ object ImageUtils {
         }
 
     fun rotateBitmap(source: Bitmap, degrees: Float): Bitmap {
-        if (degrees == 0f) return source
-        val matrix = Matrix().apply { postRotate(degrees) }
+        val normalized = ((degrees % 360f) + 360f) % 360f
+        if (normalized == 0f) return source
+        val matrix = Matrix().apply { postRotate(normalized) }
         return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
 

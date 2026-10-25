@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,7 +44,8 @@ import com.example.model.PdfQuality
 import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
 import com.example.ui.theme.EmeraldPrimary
-import com.example.ui.theme.ScannerAccent
+import java.io.File
+import java.util.Locale
 
 @Composable
 fun ExportShareDialog(
@@ -54,6 +54,7 @@ fun ExportShareDialog(
     onDismiss: () -> Unit
 ) {
     val exportedFile = uiState.lastExportedFile
+    val readyMlKitPdfFile = uiState.mlKitReadyPdfPath?.let { File(it) }?.takeIf { it.exists() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -89,7 +90,6 @@ fun ExportShareDialog(
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 if (exportedFile != null) {
-                    // Success state with file details and direct actions
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = EmeraldPrimary.copy(alpha = 0.12f),
@@ -113,7 +113,7 @@ fun ExportShareDialog(
                                     fontSize = 14.sp
                                 )
                                 Text(
-                                    text = "${exportedFile.length() / 1024} KB • ${uiState.currentPages.size} pages",
+                                    text = "${(exportedFile.length() / 1024).coerceAtLeast(1)} KB • ${uiState.currentPages.size} pages",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -123,7 +123,6 @@ fun ExportShareDialog(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Direct Share Button
                     Button(
                         onClick = { viewModel.sharePdf(exportedFile) },
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
@@ -140,7 +139,6 @@ fun ExportShareDialog(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Open / View PDF
                     OutlinedButton(
                         onClick = { viewModel.viewPdf(exportedFile) },
                         shape = RoundedCornerShape(12.dp),
@@ -154,7 +152,6 @@ fun ExportShareDialog(
                         Text("Open & View Document")
                     }
                 } else {
-                    // Configuration form: Custom filename & Quality
                     Text(
                         text = "Document Name",
                         fontSize = 13.sp,
@@ -202,7 +199,6 @@ fun ExportShareDialog(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Generate Button
                     Button(
                         onClick = { viewModel.generatePdf() },
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
@@ -219,6 +215,47 @@ fun ExportShareDialog(
                             color = Color.White,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    // Optional ready-made PDF directly from ML Kit Document Scanner (result.pdf?.uri)
+                    if (readyMlKitPdfFile != null) {
+                        val sizeBytes = readyMlKitPdfFile.length()
+                        val sizeLabel = if (sizeBytes >= 1024 * 1024) {
+                            String.format(Locale.US, "%.1f MB", sizeBytes / (1024f * 1024f))
+                        } else {
+                            "${(sizeBytes / 1024).coerceAtLeast(1)} KB"
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = { viewModel.exportMlKitReadyPdf() },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("dialog_export_mlkit_pdf_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureAsPdf,
+                                contentDescription = null,
+                                tint = EmeraldPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Use Ready-Made PDF ($sizeLabel)",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        if (!uiState.isMlKitPdfInSync) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Exports original ML Kit PDF without later page edits.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

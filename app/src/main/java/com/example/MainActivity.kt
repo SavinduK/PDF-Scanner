@@ -37,10 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.ScreenState
-import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
-import com.example.ui.screens.CameraCaptureScreen
-import com.example.ui.screens.CropAdjustScreen
 import com.example.ui.screens.ExportShareDialog
 import com.example.ui.screens.FilterEnhanceScreen
 import com.example.ui.screens.HomeScreen
@@ -71,28 +68,18 @@ fun ScannerApp(viewModel: ScannerViewModel) {
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
+            viewModel.clearError()
         }
     }
 
     // System Back Press handling
     BackHandler(enabled = uiState.currentScreen != ScreenState.HOME) {
         when (uiState.currentScreen) {
-            ScreenState.CAMERA -> {
-                if (uiState.currentPages.isNotEmpty()) {
-                    viewModel.navigateTo(ScreenState.PAGE_LIST)
-                } else {
-                    viewModel.navigateTo(ScreenState.HOME)
-                }
+            ScreenState.FILTER_ENHANCE -> viewModel.cancelPageEdit()
+            ScreenState.PAGE_LIST -> {
+                viewModel.saveCurrentDocumentSession()
+                viewModel.navigateTo(ScreenState.HOME)
             }
-            ScreenState.CROP_ADJUST -> {
-                if (uiState.currentPages.isNotEmpty()) {
-                    viewModel.navigateTo(ScreenState.PAGE_LIST)
-                } else {
-                    viewModel.navigateTo(ScreenState.CAMERA)
-                }
-            }
-            ScreenState.FILTER_ENHANCE -> viewModel.navigateTo(ScreenState.CROP_ADJUST)
-            ScreenState.PAGE_LIST -> viewModel.navigateTo(ScreenState.HOME)
             ScreenState.HOME -> { /* system handles exiting app */ }
         }
     }
@@ -101,8 +88,6 @@ fun ScannerApp(viewModel: ScannerViewModel) {
         // Screen Navigation
         when (uiState.currentScreen) {
             ScreenState.HOME -> HomeScreen(uiState = uiState, viewModel = viewModel)
-            ScreenState.CAMERA -> CameraCaptureScreen(uiState = uiState, viewModel = viewModel)
-            ScreenState.CROP_ADJUST -> CropAdjustScreen(uiState = uiState, viewModel = viewModel)
             ScreenState.FILTER_ENHANCE -> FilterEnhanceScreen(uiState = uiState, viewModel = viewModel)
             ScreenState.PAGE_LIST -> PageListScreen(uiState = uiState, viewModel = viewModel)
         }

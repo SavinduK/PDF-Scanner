@@ -7,16 +7,17 @@ data class Point2D(val x: Float, val y: Float) {
 }
 
 /**
- * Normalized quadrilateral coordinates (0.0f to 1.0f relative to image width and height)
+ * Normalized quadrilateral coordinates (0.0f to 1.0f relative to image width and height),
+ * retained for compatibility with persisted documents and DocumentImporter.
  */
 data class CropQuad(
-    val topLeft: Point2D = Point2D(0.05f, 0.05f),
-    val topRight: Point2D = Point2D(0.95f, 0.05f),
-    val bottomRight: Point2D = Point2D(0.95f, 0.95f),
-    val bottomLeft: Point2D = Point2D(0.05f, 0.95f)
+    val topLeft: Point2D = Point2D(0f, 0f),
+    val topRight: Point2D = Point2D(1f, 0f),
+    val bottomRight: Point2D = Point2D(1f, 1f),
+    val bottomLeft: Point2D = Point2D(0f, 1f)
 ) {
     companion object {
-        fun defaultQuad(): CropQuad = CropQuad()
+        fun defaultQuad(): CropQuad = fullImage()
         fun fullImage(): CropQuad = CropQuad(
             topLeft = Point2D(0f, 0f),
             topRight = Point2D(1f, 0f),
@@ -43,7 +44,7 @@ data class ScannedPage(
     val id: String = java.util.UUID.randomUUID().toString(),
     val originalImagePath: String,
     val processedImagePath: String,
-    val cropQuad: CropQuad = CropQuad.defaultQuad(),
+    val cropQuad: CropQuad = CropQuad.fullImage(),
     val filterType: FilterType = FilterType.ORIGINAL,
     val rotationDegrees: Int = 0,
     val width: Int = 0,
@@ -61,8 +62,6 @@ data class ScannedDocument(
 
 enum class ScreenState {
     HOME,
-    CAMERA,
-    CROP_ADJUST,
     FILTER_ENHANCE,
     PAGE_LIST
 }
