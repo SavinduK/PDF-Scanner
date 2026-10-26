@@ -2,24 +2,30 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Emerald80 = Color(0xFF64D8CB)
-val EmeraldGrey80 = Color(0xFFA7C1BA)
-val Teal80 = Color(0xFF80CBC4)
+// Google Material 3 Dark Document Scanner Palette
+val ScannerDarkBackground = Color(0xFF131314)
+val ScannerDarkCanvas = Color(0xFF0B0C0E)
+val ScannerSurface = Color(0xFF131314)
+val ScannerSurfaceContainerLow = Color(0xFF1B1B1D)
+val ScannerSurfaceContainer = Color(0xFF1E1F20)
+val ScannerSurfaceContainerHigh = Color(0xFF282A2C)
+val ScannerSurfaceContainerHighest = Color(0xFF333537)
 
-val EmeraldPrimary = Color(0xFF00897B)
-val EmeraldPrimaryDark = Color(0xFF00695C)
-val EmeraldSecondary = Color(0xFF26A69A)
-val EmeraldTertiary = Color(0xFF004D40)
+// Soft Pastel Periwinkle Blue (Primary CTA & Active Pill)
+val ScannerPrimaryBlue = Color(0xFFA8C7FA)
+val ScannerOnPrimaryBlue = Color(0xFF062E6F)
+val ScannerPrimaryContainer = Color(0xFF0842A0)
+val ScannerOnPrimaryContainer = Color(0xFFD3E3FD)
 
-val DarkSurface = Color(0xFF121817)
-val DarkSurfaceVariant = Color(0xFF1E2826)
-val DarkBackground = Color(0xFF0C1211)
+// Deep Ocean Teal-Blue (FAB & Accent Badges)
+val ScannerOceanContainer = Color(0xFF004A77)
+val ScannerOnOceanContainer = Color(0xFFC2E7FF)
+val ScannerSkyBadge = Color(0xFF7FCFFF)
+val ScannerOnSkyBadge = Color(0xFF003355)
 
-val LightBackground = Color(0xFFF7FAF9)
-val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFE6EFEA)
-
-val ScannerAccent = Color(0xFF00E676)
-val ScannerCropHandle = Color(0xFF00E5FF)
-val ScannerCropLine = Color(0xCC00E5FF)
-
+// Text, Icons, Outlines & Scrims
+val ScannerOnSurface = Color(0xFFE3E3E3)
+val ScannerOnSurfaceVariant = Color(0xFFC4C7C5)
+val ScannerOutline = Color(0xFF8E918F)
+val ScannerOutlineVariant = Color(0xFF444746)
+val ScannerOverlayScrim = Color(0xCC1E1F20)

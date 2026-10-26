@@ -2,6 +2,7 @@ package com.example
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -42,7 +43,6 @@ import com.example.ui.screens.ExportShareDialog
 import com.example.ui.screens.FilterEnhanceScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.PageListScreen
-import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -51,7 +51,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         setContent {
             MyApplicationTheme {
                 ScannerApp(viewModel = viewModel)
@@ -84,7 +87,12 @@ fun ScannerApp(viewModel: ScannerViewModel) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().testTag("scanner_app_root")) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .testTag("scanner_app_root")
+    ) {
         // Screen Navigation
         when (uiState.currentScreen) {
             ScreenState.HOME -> HomeScreen(uiState = uiState, viewModel = viewModel)
@@ -111,13 +119,13 @@ fun ScannerApp(viewModel: ScannerViewModel) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.65f))
+                    .background(Color.Black.copy(alpha = 0.72f))
                     .testTag("loading_overlay"),
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     tonalElevation = 8.dp,
                     shadowElevation = 8.dp,
                     modifier = Modifier.padding(32.dp)
@@ -127,7 +135,7 @@ fun ScannerApp(viewModel: ScannerViewModel) {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         CircularProgressIndicator(
-                            color = EmeraldPrimary,
+                            color = MaterialTheme.colorScheme.primary,
                             strokeWidth = 3.5.dp,
                             modifier = Modifier.size(44.dp)
                         )

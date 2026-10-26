@@ -18,11 +18,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -36,6 +37,7 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -59,8 +61,7 @@ import com.example.model.ScreenState
 import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
 import com.example.ui.components.rememberDocumentScannerLauncher
-import com.example.ui.theme.EmeraldPrimary
-import com.example.ui.theme.ScannerAccent
+import com.example.ui.theme.ScannerOverlayScrim
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +88,7 @@ fun FilterEnhanceScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = Color(0xFF0F1413),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -95,18 +96,22 @@ fun FilterEnhanceScreen(
                         text = "Document Filters",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 navigationIcon = {
                     IconButton(
                         onClick = { viewModel.cancelPageEdit() },
-                        modifier = Modifier.testTag("filter_back_btn")
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .size(40.dp)
+                            .background(ScannerOverlayScrim, CircleShape)
+                            .testTag("filter_back_btn")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back to Pages",
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
@@ -119,7 +124,7 @@ fun FilterEnhanceScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.RotateRight,
                             contentDescription = "Rotate Page",
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -135,7 +140,7 @@ fun FilterEnhanceScreen(
                         Icon(
                             imageVector = Icons.Default.Download,
                             contentDescription = "Save Image to Gallery",
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -147,19 +152,19 @@ fun FilterEnhanceScreen(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Save and Exit to Document",
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color(0xFF141D1B)
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         },
         bottomBar = {
             Surface(
-                color = Color(0xFF141D1B),
-                tonalElevation = 8.dp,
+                color = MaterialTheme.colorScheme.background,
+                tonalElevation = 4.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
@@ -169,15 +174,15 @@ fun FilterEnhanceScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 14.dp)
                 ) {
-                    // Filter options row
+                    // Filter options row (selected pastel-blue pill vs dark charcoal chips)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FilterCard(
-                            title = "Magic Color",
+                            title = "Enhance",
                             filterType = FilterType.AUTO_ENHANCE,
-                            icon = Icons.Default.AutoFixHigh,
+                            icon = Icons.Default.AutoAwesome,
                             isSelected = uiState.activeFilterType == FilterType.AUTO_ENHANCE,
                             onClick = { viewModel.selectFilter(FilterType.AUTO_ENHANCE) },
                             modifier = Modifier.weight(1f)
@@ -210,32 +215,34 @@ fun FilterEnhanceScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Action buttons: Done or Scan More
+                    // Action buttons: Outlined dark pill + Pastel periwinkle primary pill
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         OutlinedButton(
                             onClick = { viewModel.saveActivePageAndExit() },
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.35f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(52.dp)
+                                .height(54.dp)
                                 .testTag("filter_exit_btn")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = "Save Page",
-                                tint = Color.White,
+                                tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Done",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.SemiBold,
                                 fontSize = 15.sp
                             )
                         }
@@ -247,23 +254,26 @@ fun FilterEnhanceScreen(
                                     onSaved = launchDocumentScanner
                                 )
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            shape = CircleShape,
                             modifier = Modifier
-                                .weight(1.2f)
-                                .height(52.dp)
+                                .weight(1.15f)
+                                .height(54.dp)
                                 .testTag("filter_next_scan_btn")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CameraAlt,
                                 contentDescription = "Scan More",
-                                tint = Color.White,
+                                tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Scan More",
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
                             )
@@ -277,17 +287,17 @@ fun FilterEnhanceScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
+                .padding(12.dp),
             contentAlignment = Alignment.Center
         ) {
             if (previewBitmap != null) {
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(6.dp),
                     shadowElevation = 8.dp,
                     color = Color.White,
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(6.dp))
                 ) {
                     Image(
                         bitmap = previewBitmap.asImageBitmap(),
@@ -297,7 +307,10 @@ fun FilterEnhanceScreen(
                     )
                 }
             } else {
-                Text("Processing document...", color = Color.White)
+                Text(
+                    text = "Processing document...",
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
@@ -312,15 +325,34 @@ fun FilterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val borderColor = if (isSelected) ScannerAccent else Color.White.copy(alpha = 0.2f)
-    val bgColor = if (isSelected) EmeraldPrimary.copy(alpha = 0.25f) else Color(0xFF1E2826)
+    val shape = if (isSelected) CircleShape else RoundedCornerShape(12.dp)
+    val bgColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
+    val contentColor = if (isSelected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(shape)
             .background(bgColor)
-            .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(10.dp))
+            .then(
+                if (!isSelected) {
+                    Modifier.border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant,
+                        shape
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .clickable { onClick() }
             .padding(vertical = 10.dp, horizontal = 4.dp)
             .testTag("filter_option_${filterType.name}")
@@ -328,15 +360,15 @@ fun FilterCard(
         Icon(
             imageVector = icon,
             contentDescription = title,
-            tint = if (isSelected) ScannerAccent else Color.White,
-            modifier = Modifier.size(22.dp)
+            tint = contentColor,
+            modifier = Modifier.size(20.dp)
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(5.dp))
         Text(
             text = title,
             fontSize = 11.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-            color = if (isSelected) ScannerAccent else Color.White.copy(alpha = 0.85f),
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = contentColor,
             maxLines = 1
         )
     }

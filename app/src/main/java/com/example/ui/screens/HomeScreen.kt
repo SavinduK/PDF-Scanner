@@ -4,6 +4,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Share
@@ -39,6 +42,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,7 +59,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -63,11 +66,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.ScannedDocument
-import com.example.model.ScreenState
 import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
 import com.example.ui.components.rememberDocumentScannerLauncher
-import com.example.ui.theme.EmeraldPrimary
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -116,25 +117,26 @@ fun HomeScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = EmeraldPrimary,
-                            modifier = Modifier.size(34.dp)
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.size(36.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Default.Description,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = "PDF Scanner",
                             fontWeight = FontWeight.Bold,
@@ -152,7 +154,7 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.Default.CameraAlt,
                             contentDescription = "New Scan",
-                            tint = EmeraldPrimary
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -164,14 +166,33 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.Default.Upload,
                             contentDescription = "Upload Document",
-                            tint = EmeraldPrimary
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
+        },
+        floatingActionButton = {
+            if (uiState.savedDocuments.isNotEmpty()) {
+                FloatingActionButton(
+                    onClick = launchDocumentScanner,
+                    shape = RoundedCornerShape(18.dp),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .testTag("home_scan_fab")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.NoteAdd,
+                        contentDescription = "Scan New Document",
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         Column(
@@ -179,47 +200,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Active session banner if in progress
-            if (uiState.currentPages.isNotEmpty()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .clickable { viewModel.navigateTo(ScreenState.PAGE_LIST) }
-                        .testTag("resume_session_card")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Scan Session in Progress",
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                fontSize = 15.sp
-                            )
-                            Text(
-                                text = "${uiState.currentPages.size} page(s) ready for review and PDF export",
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                                fontSize = 13.sp
-                            )
-                        }
-                        Button(
-                            onClick = { viewModel.navigateTo(ScreenState.PAGE_LIST) },
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Resume", color = Color.White, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-
-            if (uiState.savedDocuments.isEmpty() && uiState.currentPages.isEmpty()) {
+            if (uiState.savedDocuments.isEmpty()) {
                 EmptyStateView(
                     onScanClick = launchDocumentScanner,
                     onGalleryClick = launchDocumentScanner,
@@ -237,7 +218,12 @@ fun HomeScreen(
                 )
 
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 88.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
@@ -312,8 +298,9 @@ fun DocumentItemCard(
     var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onOpen() }
@@ -327,16 +314,16 @@ fun DocumentItemCard(
         ) {
             // PDF icon badge
             Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = EmeraldPrimary.copy(alpha = 0.15f),
-                modifier = Modifier.size(46.dp)
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Default.PictureAsPdf,
                         contentDescription = null,
-                        tint = EmeraldPrimary,
-                        modifier = Modifier.size(26.dp)
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -348,7 +335,7 @@ fun DocumentItemCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 12.dp, end = 8.dp)
+                    .padding(start = 14.dp, end = 8.dp)
             ) {
                 Text(
                     text = document.title,
@@ -381,7 +368,7 @@ fun DocumentItemCard(
                 IconButton(
                     onClick = { menuExpanded = true },
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .testTag("doc_menu_btn_${document.id}")
                 ) {
                     Icon(
@@ -394,6 +381,7 @@ fun DocumentItemCard(
                 DropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.testTag("doc_dropdown_${document.id}")
                 ) {
                     DropdownMenuItem(
@@ -402,7 +390,7 @@ fun DocumentItemCard(
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = null,
-                                tint = EmeraldPrimary
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         },
                         onClick = {
@@ -417,7 +405,8 @@ fun DocumentItemCard(
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Share,
-                                contentDescription = null
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
                         onClick = {
@@ -433,7 +422,7 @@ fun DocumentItemCard(
                             Icon(
                                 imageVector = Icons.Default.FileDownload,
                                 contentDescription = null,
-                                tint = EmeraldPrimary
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         },
                         onClick = {
@@ -478,16 +467,16 @@ fun EmptyStateView(
         verticalArrangement = Arrangement.Center
     ) {
         Surface(
-            shape = CircleShape,
-            color = EmeraldPrimary.copy(alpha = 0.12f),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer,
             modifier = Modifier.size(96.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Default.Description,
                     contentDescription = null,
-                    tint = EmeraldPrimary,
-                    modifier = Modifier.size(48.dp)
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(46.dp)
                 )
             }
         }
@@ -508,51 +497,86 @@ fun EmptyStateView(
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 20.sp,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.widthIn(max = 460.dp)
         )
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(30.dp))
 
         Button(
             onClick = onScanClick,
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
             modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .height(48.dp)
+                .widthIn(max = 360.dp)
+                .fillMaxWidth(0.88f)
+                .height(52.dp)
                 .testTag("empty_state_scan_btn")
         ) {
-            Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White)
+            Icon(
+                imageVector = Icons.Default.CameraAlt,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary
+            )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Start Scanning", fontWeight = FontWeight.Bold, color = Color.White)
+            Text(
+                text = "Start Scanning",
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedButton(
             onClick = onImportDocumentClick,
-            shape = RoundedCornerShape(12.dp),
+            shape = CircleShape,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
             modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .height(48.dp)
+                .widthIn(max = 360.dp)
+                .fillMaxWidth(0.88f)
+                .height(52.dp)
                 .testTag("empty_state_import_pdf_btn")
         ) {
-            Text("Upload Document", fontWeight = FontWeight.SemiBold)
+            Text(
+                text = "Upload Document",
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedButton(
             onClick = onGalleryClick,
-            shape = RoundedCornerShape(12.dp),
+            shape = CircleShape,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
             modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .height(48.dp)
+                .widthIn(max = 360.dp)
+                .fillMaxWidth(0.88f)
+                .height(52.dp)
                 .testTag("empty_state_gallery_btn")
         ) {
-            Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+            Icon(
+                imageVector = Icons.Default.PhotoLibrary,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Import from Photos", fontWeight = FontWeight.SemiBold)
+            Text(
+                text = "Import from Photos",
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

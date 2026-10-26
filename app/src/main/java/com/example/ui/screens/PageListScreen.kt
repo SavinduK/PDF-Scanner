@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
@@ -38,6 +39,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,7 +56,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -72,7 +73,7 @@ import com.example.model.ScreenState
 import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
 import com.example.ui.components.rememberDocumentScannerLauncher
-import com.example.ui.theme.EmeraldPrimary
+import com.example.ui.theme.ScannerOverlayScrim
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +105,7 @@ fun PageListScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -112,7 +114,8 @@ fun PageListScreen(
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 navigationIcon = {
@@ -125,7 +128,8 @@ fun PageListScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to Home"
+                            contentDescription = "Back to Home",
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
@@ -139,7 +143,11 @@ fun PageListScreen(
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Share PDF",
-                            tint = if (uiState.currentPages.isNotEmpty()) EmeraldPrimary else Color.Gray
+                            tint = if (uiState.currentPages.isNotEmpty()) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            }
                         )
                     }
 
@@ -152,7 +160,11 @@ fun PageListScreen(
                         Icon(
                             imageVector = Icons.Default.Save,
                             contentDescription = "Save Document",
-                            tint = if (uiState.currentPages.isNotEmpty()) EmeraldPrimary else Color.Gray
+                            tint = if (uiState.currentPages.isNotEmpty()) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            }
                         )
                     }
 
@@ -164,14 +176,33 @@ fun PageListScreen(
                         Icon(
                             imageVector = Icons.Default.CameraAlt,
                             contentDescription = "Scan new pages",
-                            tint = EmeraldPrimary
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
+        },
+        floatingActionButton = {
+            if (uiState.currentPages.isNotEmpty()) {
+                FloatingActionButton(
+                    onClick = launchDocumentScanner,
+                    shape = RoundedCornerShape(18.dp),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .testTag("page_list_add_fab")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.NoteAdd,
+                        contentDescription = "Add Pages",
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         if (uiState.currentPages.isEmpty()) {
@@ -182,14 +213,27 @@ fun PageListScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No pages in current document", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = "No pages in current document",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = launchDocumentScanner,
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                        modifier = Modifier.testTag("page_list_add_first_btn")
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier
+                            .height(48.dp)
+                            .testTag("page_list_add_first_btn")
                     ) {
-                        Text("Add First Page")
+                        Text(
+                            text = "Add First Page",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
                 }
             }
@@ -228,14 +272,19 @@ fun PageListScreen(
                         text = "${uiState.currentPages.size} page${if (uiState.currentPages.size == 1) "" else "s"}",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = EmeraldPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     state = gridState,
-                    contentPadding = PaddingValues(12.dp),
+                    contentPadding = PaddingValues(
+                        start = 12.dp,
+                        end = 12.dp,
+                        top = 12.dp,
+                        bottom = 88.dp
+                    ),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier
@@ -321,11 +370,22 @@ fun PageThumbnailCard(
     onDelete: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            containerColor = if (isDragging) {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            }
         ),
-        border = if (isDragging) BorderStroke(2.dp, EmeraldPrimary) else null,
+        border = BorderStroke(
+            width = if (isDragging) 2.dp else 1.dp,
+            color = if (isDragging) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            }
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 16.dp else 2.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -342,12 +402,12 @@ fun PageThumbnailCard(
             .testTag("page_card_$pageNumber")
     ) {
         Column {
-            // Thumbnail preview with page badge and delete
+            // Thumbnail preview with sky-blue page badge and dark circular delete overlay
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(0.72f)
-                    .background(Color.DarkGray)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
             ) {
                 AsyncImage(
                     model = File(page.processedImagePath),
@@ -358,50 +418,52 @@ fun PageThumbnailCard(
                         .clickable { onReFilter() }
                 )
 
-                // Page number chip (Top-Left)
+                // Sky-blue page number pill badge (matching the reference screenshot thumbnail badge)
                 Surface(
-                    shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
-                    color = EmeraldPrimary,
-                    modifier = Modifier.align(Alignment.TopStart)
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
                 ) {
                     Text(
-                        text = "Page $pageNumber",
-                        color = Color.White,
-                        fontSize = 11.sp,
+                        text = "$pageNumber",
+                        color = MaterialTheme.colorScheme.onSecondary,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                     )
                 }
 
-                // Delete button (Top-Right)
+                // Translucent dark circular delete button (Top-Right)
                 IconButton(
                     onClick = onDelete,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp)
-                        .size(32.dp)
-                        .background(Color(0x88000000), CircleShape)
+                        .size(38.dp)
+                        .background(ScannerOverlayScrim, CircleShape)
                         .testTag("page_delete_btn_$pageNumber")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Delete Page",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
                 // Filter label pill (Bottom-Left)
                 Surface(
-                    shape = RoundedCornerShape(topEnd = 6.dp),
-                    color = Color(0x99000000),
+                    shape = RoundedCornerShape(topEnd = 8.dp),
+                    color = ScannerOverlayScrim,
                     modifier = Modifier.align(Alignment.BottomStart)
                 ) {
                     Text(
                         text = page.filterType.displayName,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
             }
@@ -417,7 +479,9 @@ fun PageThumbnailCard(
                 // Rotate 90° button
                 IconButton(
                     onClick = onRotate,
-                    modifier = Modifier.size(36.dp).testTag("page_rotate_btn_$pageNumber")
+                    modifier = Modifier
+                        .size(42.dp)
+                        .testTag("page_rotate_btn_$pageNumber")
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.RotateRight,
@@ -430,7 +494,9 @@ fun PageThumbnailCard(
                 // Filter / Enhance button
                 IconButton(
                     onClick = onReFilter,
-                    modifier = Modifier.size(36.dp).testTag("page_refilter_btn_$pageNumber")
+                    modifier = Modifier
+                        .size(42.dp)
+                        .testTag("page_refilter_btn_$pageNumber")
                 ) {
                     Icon(
                         imageVector = Icons.Default.FilterAlt,
@@ -443,14 +509,18 @@ fun PageThumbnailCard(
                 // Hold & Drag Handle Indicator
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(42.dp)
                         .testTag("page_drag_handle_$pageNumber"),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.DragHandle,
                         contentDescription = "Hold and drag to move",
-                        tint = if (isDragging) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        tint = if (isDragging) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                        },
                         modifier = Modifier.size(20.dp)
                     )
                 }

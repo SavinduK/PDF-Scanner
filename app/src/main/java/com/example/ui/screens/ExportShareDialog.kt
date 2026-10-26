@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -35,7 +37,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import com.example.model.PdfQuality
 import com.example.ui.ScannerUiState
 import com.example.ui.ScannerViewModel
-import com.example.ui.theme.EmeraldPrimary
 import java.io.File
 import java.util.Locale
 
@@ -58,10 +58,11 @@ fun ExportShareDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("export_dialog"),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -72,18 +73,23 @@ fun ExportShareDialog(
                     Icon(
                         imageVector = Icons.Default.PictureAsPdf,
                         contentDescription = null,
-                        tint = EmeraldPrimary,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = if (exportedFile != null) "PDF Ready" else "Export PDF",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         },
@@ -91,8 +97,8 @@ fun ExportShareDialog(
             Column(modifier = Modifier.fillMaxWidth()) {
                 if (exportedFile != null) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = EmeraldPrimary.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -102,7 +108,7 @@ fun ExportShareDialog(
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                tint = EmeraldPrimary,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                 modifier = Modifier.size(32.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -110,12 +116,13 @@ fun ExportShareDialog(
                                 Text(
                                     text = exportedFile.name,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                                 Text(
                                     text = "${(exportedFile.length() / 1024).coerceAtLeast(1)} KB • ${uiState.currentPages.size} pages",
                                     fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
                                 )
                             }
                         }
@@ -125,29 +132,48 @@ fun ExportShareDialog(
 
                     Button(
                         onClick = { viewModel.sharePdf(exportedFile) },
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = CircleShape,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(50.dp)
                             .testTag("dialog_share_btn")
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, tint = Color.White)
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Share PDF via Apps", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Share PDF via Apps",
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
                     OutlinedButton(
                         onClick = { viewModel.viewPdf(exportedFile) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = CircleShape,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(50.dp)
                             .testTag("dialog_view_pdf_btn")
                     ) {
-                        Icon(Icons.Default.Visibility, contentDescription = null)
+                        Icon(
+                            imageVector = Icons.Default.Visibility,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Open & View Document")
                     }
@@ -163,7 +189,7 @@ fun ExportShareDialog(
                         value = uiState.exportFilename,
                         onValueChange = { viewModel.updateExportFilename(it) },
                         singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("export_filename_input")
@@ -201,18 +227,25 @@ fun ExportShareDialog(
 
                     Button(
                         onClick = { viewModel.generatePdf() },
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = CircleShape,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(50.dp)
                             .testTag("dialog_generate_pdf_btn")
                     ) {
-                        Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
+                        Icon(
+                            imageVector = Icons.Default.Save,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Generate & Save PDF (${uiState.currentPages.size} Pages)",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -230,16 +263,20 @@ fun ExportShareDialog(
 
                         OutlinedButton(
                             onClick = { viewModel.exportMlKitReadyPdf() },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
+                                .height(50.dp)
                                 .testTag("dialog_export_mlkit_pdf_btn")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PictureAsPdf,
                                 contentDescription = null,
-                                tint = EmeraldPrimary
+                                tint = MaterialTheme.colorScheme.primary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
@@ -270,12 +307,20 @@ fun QualityOptionRow(
     isSelected: Boolean,
     onSelect: () -> Unit
 ) {
-    val borderColor = if (isSelected) EmeraldPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-    val bgColor = if (isSelected) EmeraldPrimary.copy(alpha = 0.08f) else Color.Transparent
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
+    val bgColor = if (isSelected) {
+        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
 
     Surface(
-        shape = RoundedCornerShape(10.dp),
-        border = androidx.compose.foundation.BorderStroke(if (isSelected) 2.dp else 1.dp, borderColor),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, borderColor),
         color = bgColor,
         modifier = Modifier
             .fillMaxWidth()
@@ -292,7 +337,11 @@ fun QualityOptionRow(
                     .clip(RoundedCornerShape(9.dp))
                     .border(
                         2.dp,
-                        if (isSelected) EmeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                         RoundedCornerShape(9.dp)
                     ),
                 contentAlignment = Alignment.Center
@@ -302,7 +351,7 @@ fun QualityOptionRow(
                         modifier = Modifier
                             .size(10.dp)
                             .clip(RoundedCornerShape(5.dp))
-                            .background(EmeraldPrimary)
+                            .background(MaterialTheme.colorScheme.primary)
                     )
                 }
             }

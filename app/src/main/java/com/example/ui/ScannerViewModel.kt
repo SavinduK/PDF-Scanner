@@ -749,7 +749,20 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
     fun deleteDocument(doc: ScannedDocument) {
         doc.lastPdfPath?.let { File(it).delete() }
         val updated = _uiState.value.savedDocuments.filter { it.id != doc.id }
-        _uiState.update { it.copy(savedDocuments = updated) }
+        _uiState.update { state ->
+            if (state.currentDocumentId == doc.id) {
+                state.copy(
+                    savedDocuments = updated,
+                    currentDocumentId = null,
+                    currentDocumentTitle = "",
+                    currentPages = emptyList(),
+                    mlKitReadyPdfPath = null,
+                    isMlKitPdfInSync = false
+                )
+            } else {
+                state.copy(savedDocuments = updated)
+            }
+        }
         persistDocuments(updated)
     }
 
