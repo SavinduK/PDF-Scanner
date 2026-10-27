@@ -1,8 +1,81 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="66dp"
-        android:height="66dp"
-        android:drawable="@drawable/ic_scanner_logo"
-        android:gravity="center" />
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Scanner corner brackets (~60% of visible icon, centered with comfortable padding) -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M32,40.5 L32,36.5 C32,34 34,32 36.5,32 L40.5,32"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M67.5,32 L71.5,32 C74,32 76,34 76,36.5 L76,40.5"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M32,67.5 L32,71.5 C32,74 34,76 36.5,76 L40.5,76"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M67.5,76 L71.5,76 C74,76 76,74 76,71.5 L76,67.5"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+
+    <!-- Document page outline with folded top-right corner -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M58,37 L43,37 C41.6,37 40.5,38.1 40.5,39.5 L40.5,68.5 C40.5,69.9 41.6,71 43,71 L65,71 C66.4,71 67.5,69.9 67.5,68.5 L67.5,46.5 Z"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+
+    <!-- Folded top-right corner inner flap -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M58,37 L58,44.5 C58,45.6 58.9,46.5 60,46.5 L67.5,46.5"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+
+    <!-- Two short text lines inside the document -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M46,46.5 L53,46.5"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M46,61.5 L58.5,61.5"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+
+    <!-- Horizontal scan line crossing the middle -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M31,54 L77,54"
+        android:strokeColor="#A8C7FA"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.0" />
+
+</vector>
